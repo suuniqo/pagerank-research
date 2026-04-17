@@ -14,7 +14,11 @@ fn main() {
 
     let undirected = graph.make_undirected();
 
-    let partition = PartitionSet::singleton(&undirected);
+    let partition = PartitionSet::from_louvain(&undirected);
 
+    println!("partitions ready");
+
+    dbg!(partition.len());
     dbg!(partition.modularity());
+    dbg!(&partition.communities()[..10]);
 }
