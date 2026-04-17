@@ -10,5 +10,11 @@ fn main() {
         Err(err) => panic!("{err}")
     };
 
-    dbg!(graph.successors(2831));
+    dbg!(graph.successors(871));
+    dbg!(graph.successors(1));
+
+    let undirected = graph.make_undirected();
+
+    dbg!(undirected.successors(871));
+    dbg!(undirected.successors(1));
 }

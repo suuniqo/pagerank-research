@@ -1,6 +1,21 @@
 use std::{fs::File, io::{BufRead, BufReader}};
 
-use crate::graph::GraphMetadata;
+#[derive(Debug, Clone, Copy)]
+pub struct MtxMetadata {
+    pub nrows: usize,
+    pub ncols: usize,
+    pub nnz: usize,
+}
+
+impl MtxMetadata {
+    pub fn new(nrows: usize, ncols: usize, nnz: usize) -> Self {
+        Self {
+            nrows,
+            ncols,
+            nnz,
+        }
+    }
+}
 
 #[derive(Debug)]
 pub enum ParseError {
@@ -26,7 +41,7 @@ impl std::error::Error for ParseError { }
 pub struct Parser;
 
 impl Parser {
-    pub fn parse_mtx(path: &str) -> Result<(GraphMetadata, Vec<(usize, usize)>), ParseError> {
+    pub fn parse_mtx(path: &str) -> Result<(MtxMetadata, Vec<(usize, usize)>), ParseError> {
         let file = File::open(path)
             .map_err(|e| ParseError::Io(e))?;
 
@@ -59,7 +74,7 @@ impl Parser {
         let mut split = buf.split_whitespace();
 
         // parse metadata
-        let metadata = GraphMetadata::new(
+        let metadata = MtxMetadata::new(
             split.next()
                 .ok_or(ParseError::BadLine(buf.clone()))?
                 .parse()

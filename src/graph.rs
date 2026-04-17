@@ -2,26 +2,10 @@ mod parser;
 
 use parser::{Parser, ParseError};
 
-#[derive(Debug, Clone, Copy)]
-pub struct GraphMetadata {
-    pub nrows: usize,
-    pub ncols: usize,
-    pub nnz: usize,
-}
-
-impl GraphMetadata {
-    pub fn new(nrows: usize, ncols: usize, nnz: usize) -> Self {
-        Self {
-            nrows,
-            ncols,
-            nnz,
-        }
-    }
-}
-
 #[derive(Debug, Clone)]
 pub struct Graph {
-    metadata: GraphMetadata,
+    n_nodes: usize,
+    n_edges: usize,
     adj_list: Vec<Vec<usize>>
 }
 
@@ -35,12 +19,41 @@ impl Graph {
         }
 
         Ok(Self {
-            metadata,
+            n_nodes: metadata.nrows,
+            n_edges: metadata.nnz,
             adj_list
         })
     }
 
+    pub fn n_nodes(&self) -> usize {
+        self.n_nodes
+    }
+
+    pub fn n_edges(&self) -> usize {
+        self.n_edges
+    }
+
     pub fn successors(&self, v: usize) -> &[usize] {
         &self.adj_list[v]
+    }
+
+    pub fn make_undirected(&self) -> Self {
+        let mut n_edges = self.n_edges;
+        let mut adj_list = self.adj_list.clone();
+
+        for (u, adj) in self.adj_list.iter().enumerate() {
+            for &v in adj {
+                if !adj_list[v].contains(&u) {
+                    adj_list[v].push(u);
+                    n_edges += 1;
+                }
+            }
+        }
+
+        Self {
+            n_nodes: self.n_nodes,
+            n_edges,
+            adj_list
+        }
     }
 }
