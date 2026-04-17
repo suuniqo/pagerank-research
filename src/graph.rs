@@ -1,4 +1,5 @@
 mod parser;
+mod partition;
 
 use parser::{Parser, ParseError};
 
@@ -33,8 +34,12 @@ impl Graph {
         self.n_edges
     }
 
-    pub fn successors(&self, v: usize) -> &[usize] {
+    pub fn successors_unchecked(&self, v: usize) -> &[usize] {
         &self.adj_list[v]
+    }
+
+    pub fn degree_unchecked(&self, v: usize) -> usize {
+        self.adj_list[v].len()
     }
 
     pub fn make_undirected(&self) -> Self {
