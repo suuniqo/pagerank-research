@@ -1,5 +1,5 @@
 mod parser;
-mod partition;
+pub mod partition;
 
 use parser::{Parser, ParseError};
 

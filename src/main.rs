@@ -2,6 +2,8 @@ mod graph;
 
 use graph::Graph;
 
+use crate::graph::partition::PartitionSet;
+
 const DATA_PATH: &str = "data/web-Stanford.mtx";
 
 fn main() {
@@ -10,5 +12,9 @@ fn main() {
         Err(err) => panic!("{err}")
     };
 
-    let _undirected = graph.make_undirected();
+    let undirected = graph.make_undirected();
+
+    let partition = PartitionSet::singleton(&undirected);
+
+    dbg!(partition.modularity());
 }
