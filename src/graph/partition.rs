@@ -30,18 +30,28 @@ impl<'g> PartitionSet<'g> {
         }
     }
 
-    pub fn from_louvain(graph: &'g Graph) -> Self {
+    pub fn neighbour_community_weights(graph: &Graph, v: usize, community: &[usize]) -> HashMap<usize, usize> {
+        let mut neig_comm_weights = HashMap::new();
+        let neigs = &graph.adj_list[v];
+
+        for &(v, weight) in neigs {
+                let cv = community[v];
+                *neig_comm_weights.entry(cv).or_insert(0) += weight;
+        }
+
+        neig_comm_weights
+    }
+
+    fn louvain_moves(graph: &'g Graph, resolution: f64, m: f64, gain_treshold: f64) -> Option<Vec<usize>> {
         // Community partition
         let mut community: Vec<usize> = (0..graph.n_nodes).collect();
 
         // Sum of the degrees of the nodes in each community
-        let mut deg_comm = (0..graph.n_nodes)
-            .map(|node| graph.degree_unchecked(node))
+        let mut strength_comm = (0..graph.n_nodes)
+            .map(|node| graph.strength_unchecked(node))
             .collect::<Vec<usize>>();
 
         let mut total_gain = 0.0;
-
-        let m = graph.n_edges;
 
         let mut change = true;
 
@@ -52,58 +62,57 @@ impl<'g> PartitionSet<'g> {
             order.shuffle(&mut rng());
             
             for &u in &order {
-                let neigs = &graph.adj_list[u];
-                let mut neig_comm_weights = HashMap::new();
-
-                // Compute number of edges to each of the neighboring communities
-                for &v in neigs {
-                    let cv = community[v];
-                    *neig_comm_weights.entry(cv).or_insert(0) += 1;
-                }
+                let neig_comm_weights 
+                    = Self::neighbour_community_weights(graph, u, &community);
 
                 let curr_comm = community[u];
-                let curr_deg = graph.degree_unchecked(u);
-
-                let curr_comm_deg = deg_comm[curr_comm];
-                let curr_comm_weight = *neig_comm_weights
-                    .get(&curr_comm)
-                    .unwrap_or(&0);
+                let curr_strength = graph.strength_unchecked(u);
 
                 // exclude u from the degree count
-                deg_comm[curr_comm] -= curr_deg;
+                strength_comm[curr_comm] -= curr_strength;
 
-                let mut max_delta = 0.0;
+                let community_delta = |c: usize| -> f64 {
+                    let &wt = neig_comm_weights.get(&c).unwrap_or(&0);
+                    // As mentioned above this is m times the change in modularity
+                    // caused by moving a node out of the community.
+                    -(wt as f64) + 0.5 * resolution * (strength_comm[c] as f64) * (curr_strength as f64) / m
+                };
+
+                let mut max_gain = 0.0;
                 let mut best_comm  = curr_comm;
+
+                let remove_cost = community_delta(best_comm);
 
                 for &c in neig_comm_weights.keys() {
                     if c == curr_comm {
                         continue;
                     }
 
-                    let gain = (neig_comm_weights[&c] as f64 - curr_comm_weight as f64) / m as f64;
-                    let correction = (curr_deg as f64 * (curr_comm_deg as f64 - deg_comm[c] as f64)) / (2.0 * m as f64 * m as f64);
+                    let gain = remove_cost - community_delta(c);
 
-                    let delta = gain + correction;
-
-                    if delta > max_delta {
-                        max_delta = delta;
+                    if gain > max_gain {
+                        max_gain = gain;
                         best_comm = c;
                     }
                 }
 
                 // increase the degree of best community
-                deg_comm[best_comm] += curr_deg;
+                strength_comm[best_comm] += curr_strength;
 
-                if best_comm != curr_comm && max_delta > 0.0 {
+                if best_comm != curr_comm {
                     community[u] = best_comm;
 
-                    total_gain += max_delta;
+                    total_gain += max_gain;
 
                     change = true;
                 }
             }
 
             println!("gain: {total_gain}");
+        }
+
+        if total_gain < m * gain_treshold {
+            return None;
         }
 
         // Compute new partition
@@ -128,6 +137,20 @@ impl<'g> PartitionSet<'g> {
 
             new_community[u] = new_comm;
         }
+
+        Some(new_community)
+    }
+
+    pub fn from_louvain(graph: &'g Graph, resolution: f64, max_iterations: usize, gain_treshold: f64) -> Self {
+        let m = graph.weights().sum() as f64;
+        
+        let mut iter = 0;
+        while iter < max_iterations 
+            && let Some(community) = Self::louvain_moves(graph, resolution, m, gain_treshold) 
+        {
+                
+        }
+
 
         Self {
             graph,
@@ -159,22 +182,24 @@ impl<'g> PartitionSet<'g> {
         for (u, neig) in self.graph.adj_list.iter().enumerate() {
             let cu = self.community[u];
 
-            a[cu] += self.graph.degree_unchecked(u);
+            a[cu] += self.graph.strength_unchecked(u);
 
-            for &v in neig {
+            for &(v, weight) in neig {
                 if self.community[v] == cu {
-                    e[cu] += 1;
+                    e[cu] += weight;
                 }
             }
         }
 
         let mut q = 0.0;
 
+        let m = self.graph.weights().sum::<usize>();
+
         for c in 0..self.n_partitions {
-            q += e[c] as f64 - (a[c].pow(2) as f64 / (2 * self.graph.n_edges) as f64);
+            q += e[c] as f64 - (a[c].pow(2) as f64 / (2 * m) as f64);
         }
 
-        q / (2 * self.graph.n_edges) as f64
+        q / (2 * m) as f64
     }
 
     pub fn len(&self) -> usize {

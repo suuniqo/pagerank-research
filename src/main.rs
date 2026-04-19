@@ -14,8 +14,7 @@ fn main() {
 
     let undirected = graph.make_undirected();
 
-    let partition = PartitionSet::from_louvain(&undirected);
-
+    let partition = PartitionSet::from_louvain(&undirected, 1.0);
     println!("partitions ready");
 
     dbg!(partition.len());
