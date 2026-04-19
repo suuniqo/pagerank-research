@@ -11,6 +11,21 @@ pub struct Graph {
 }
 
 impl Graph {
+    pub fn new(adj_list: Vec<Vec<(usize, usize)>>) -> Self {
+        let n_edges = adj_list
+            .iter()
+            .map(|adj| adj.len())
+            .sum::<usize>() / 2;
+
+        let n_nodes = adj_list.len();
+
+        Self {
+            n_nodes,
+            n_edges,
+            adj_list,
+        }
+    }
+
     pub fn from_mtx(path: &str) -> Result<Self, ParseError> {
         let (metadata, edges) = Parser::parse_mtx(path)?;
         let mut adj_list = vec![vec![]; metadata.nrows];
@@ -34,15 +49,15 @@ impl Graph {
         self.n_edges
     }
 
-    pub fn successors_unchecked(&self, v: usize) -> &[(usize, usize)] {
-        &self.adj_list[v]
+    pub fn neighbours(&self, u: usize) -> &[(usize, usize)] {
+        &self.adj_list[u]
     }
 
-    pub fn degree_unchecked(&self, v: usize) -> usize {
-        self.adj_list[v].len()
+    pub fn degree(&self, u: usize) -> usize {
+        self.adj_list[u].len()
     }
 
-    pub fn strength_unchecked(&self, v: usize) -> usize {
+    pub fn strength(&self, v: usize) -> usize {
         self.weights_of(v).sum()
     }
 
