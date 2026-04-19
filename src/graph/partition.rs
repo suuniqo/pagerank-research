@@ -283,12 +283,10 @@ impl<'g> PartitionSet<'g> {
     const LOUVAIN_THRESHOLD: f64 = 0.00001;
     const LOUVAIN_RESOLUTION: f64 = 1.0;
 
-    pub fn from_louvain(graph: &'g Graph, fast: bool, resolution: Option<f64>, gain_threshold: Option<f64>, max_iter: Option<usize>) -> Self {
+    pub fn from_louvain(graph: &'g Graph, fast: bool, resolution: f64, gain_threshold: f64, max_iter: Option<usize>) -> Self {
         let mut iter = 0;
         let mut curr = Self::singleton(graph);
 
-        let resolution = resolution.unwrap_or(Self::LOUVAIN_RESOLUTION).clamp(0.0, 1.0);
-        let gain_threshold = gain_threshold.unwrap_or(Self::LOUVAIN_THRESHOLD);
         let partition_move = if fast { Self::louvain_moves } else { Self::fast_louvain_moves };
 
         let m = graph.weights().sum::<usize>() as f64 / 2.0;
@@ -351,5 +349,55 @@ impl<'g> PartitionSet<'g> {
 
     pub fn len(&self) -> usize {
         self.n_partitions
+    }
+}
+
+pub struct LouvainBuilder<'g> {
+    graph: &'g Graph,
+    fast: bool,
+    resolution: f64,
+    gain_threshold: f64,
+    max_iter: Option<usize>,
+}
+
+impl<'g> LouvainBuilder<'g> {
+    pub fn new(graph: &'g Graph) -> Self {
+        Self {
+            graph,
+            fast: true,
+            resolution: PartitionSet::LOUVAIN_RESOLUTION,
+            gain_threshold: PartitionSet::LOUVAIN_THRESHOLD,
+            max_iter: None,
+        }
+    }
+
+    pub fn fast(mut self, fast: bool) -> Self {
+        self.fast = fast;
+        self
+    }
+
+    pub fn resolution(mut self, resolution: f64) -> Self {
+        self.resolution = resolution.clamp(0.0, 1.0);
+        self
+    }
+
+    pub fn gain_threshold(mut self, gain_threshold: f64) -> Self {
+        self.gain_threshold = gain_threshold;
+        self
+    }
+
+    pub fn max_iter(mut self, max_iter: usize) -> Self {
+        self.max_iter = Some(max_iter);
+        self
+    }
+
+    pub fn run(self) -> PartitionSet<'g> {
+        PartitionSet::from_louvain(
+            self.graph,
+            self.fast,
+            self.resolution,
+            self.gain_threshold,
+            self.max_iter,
+        )
     }
 }

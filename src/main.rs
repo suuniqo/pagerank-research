@@ -2,7 +2,7 @@ mod graph;
 
 use graph::Graph;
 
-use crate::graph::partition::PartitionSet;
+use crate::graph::partition::LouvainBuilder;
 
 const DATA_PATH: &str = "data/web-Stanford.mtx";
 
@@ -18,7 +18,13 @@ fn main() {
     let undirected = graph.make_undirected();
 
     let start = std::time::Instant::now();
-    let communities = PartitionSet::from_louvain(&undirected, 1.0, true, None, None);
+
+    let communities = LouvainBuilder::new(&undirected)
+        .fast(true)
+        .resolution(1.0)
+        .gain_threshold(0.0001)
+        .run();
+
     let elapsed = start.elapsed();
     println!("louvain method: {}ms", elapsed.as_millis());
 
