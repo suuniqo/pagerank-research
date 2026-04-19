@@ -287,7 +287,7 @@ impl<'g> PartitionSet<'g> {
         let mut iter = 0;
         let mut curr = Self::singleton(graph);
 
-        let partition_move = if fast { Self::louvain_moves } else { Self::fast_louvain_moves };
+        let partition_move = if fast { Self::fast_louvain_moves } else { Self::louvain_moves };
 
         let m = graph.weights().sum::<usize>() as f64 / 2.0;
 
