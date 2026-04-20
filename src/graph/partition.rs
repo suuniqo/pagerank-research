@@ -48,7 +48,7 @@ impl<'g> PartitionSet<'g> {
         neig_comm_weights
     }
 
-    fn aggregate_graph(&self) -> Cow<'g, Graph> {
+    pub fn aggregate_graph(&self) -> Cow<'g, Graph> {
         if self.n_partitions == self.graph.n_nodes {
             return Cow::Borrowed(self.graph);
         }
@@ -76,6 +76,78 @@ impl<'g> PartitionSet<'g> {
         Cow::Owned(Graph::new(adj_list))
     }
 
+    fn compress_partition(prev_partition: &Self, community: &[usize]) -> Self {
+        let mut new_community = vec![0; prev_partition.graph.n_nodes];
+        let mut final_tag = HashMap::new();
+        let mut n_partitions = 0;
+
+        for u in 0..prev_partition.graph.n_nodes {
+            let prev_comm = community[prev_partition.community[u]];
+            let new_comm = match final_tag.get(&prev_comm) {
+                Some(new_comm) => *new_comm,
+                None => {
+                    let new_comm = n_partitions;
+                    n_partitions += 1;
+
+                    final_tag.insert(prev_comm, new_comm);
+
+                    new_comm
+                },
+            };
+
+            new_community[u] = new_comm;
+        }
+
+        Self {
+            community: new_community,
+            n_partitions,
+            graph: prev_partition.graph,
+        }
+    }
+
+    fn best_community_move(
+        strength_comm: &mut [usize],
+        neig_comm_weights: HashMap<usize, usize>,
+        curr_comm: usize,
+        curr_strength: usize,
+        resolution: f64,
+        m: f64,
+    ) -> (usize, f64)
+    {
+        let mut max_gain = 0.0;
+        let mut best_comm  = curr_comm;
+
+        // exclude u from the degree count
+        strength_comm[curr_comm] -= curr_strength;
+
+        let community_delta = |c: usize| -> f64 {
+            let wt = *neig_comm_weights.get(&c).unwrap_or(&0) as f64;
+            // As mentioned above this is m times the change in modularity
+            // caused by moving a node out of the community.
+            -wt + 0.5 * resolution * (strength_comm[c] as f64) * (curr_strength as f64) / m
+        };
+
+        let remove_cost = community_delta(best_comm);
+
+        for &c in neig_comm_weights.keys() {
+            if c == curr_comm {
+                continue;
+            }
+
+            let gain = remove_cost - community_delta(c);
+
+            if gain > max_gain {
+                max_gain = gain;
+                best_comm = c;
+            }
+        }
+
+        // increase the degree of best community
+        strength_comm[best_comm] += curr_strength;
+
+        (best_comm, max_gain)
+    }
+
     fn fast_louvain_moves(partition: &Self, resolution: f64, m: f64, gain_treshold: f64) -> Option<Self> {
         // Community partition
         let graph = partition.aggregate_graph();
@@ -99,36 +171,14 @@ impl<'g> PartitionSet<'g> {
             let curr_comm = community[u];
             let curr_strength = graph.strength(u);
 
-            let mut max_gain = 0.0;
-            let mut best_comm  = curr_comm;
-
-            // exclude u from the degree count
-            strength_comm[curr_comm] -= curr_strength;
-
-            let community_delta = |c: usize| -> f64 {
-                let wt = *neig_comm_weights.get(&c).unwrap_or(&0) as f64;
-                // As mentioned above this is m times the change in modularity
-                // caused by moving a node out of the community.
-                -wt + 0.5 * resolution * (strength_comm[c] as f64) * (curr_strength as f64) / m
-            };
-
-            let remove_cost = community_delta(best_comm);
-
-            for &c in neig_comm_weights.keys() {
-                if c == curr_comm {
-                    continue;
-                }
-
-                let gain = remove_cost - community_delta(c);
-
-                if gain > max_gain {
-                    max_gain = gain;
-                    best_comm = c;
-                }
-            }
-
-            // increase the degree of best community
-            strength_comm[best_comm] += curr_strength;
+            let (best_comm, max_gain) = Self::best_community_move(
+                &mut strength_comm,
+                neig_comm_weights,
+                curr_comm,
+                curr_strength,
+                resolution,
+                m
+            );
 
             if best_comm != curr_comm {
                 // a move is performed
@@ -149,33 +199,7 @@ impl<'g> PartitionSet<'g> {
         }
 
         // Compute new partition
-
-        let mut new_community = vec![0; partition.graph.n_nodes];
-        let mut final_tag = HashMap::new();
-        let mut n_partitions = 0;
-
-        for u in 0..partition.graph.n_nodes {
-            let prev_comm = community[partition.community[u]];
-            let new_comm = match final_tag.get(&prev_comm) {
-                Some(new_comm) => *new_comm,
-                None => {
-                    let new_comm = n_partitions;
-                    n_partitions += 1;
-
-                    final_tag.insert(prev_comm, new_comm);
-
-                    new_comm
-                },
-            };
-
-            new_community[u] = new_comm;
-        }
-
-        Some(Self {
-            community: new_community,
-            n_partitions,
-            graph: partition.graph,
-        })
+        Some(Self::compress_partition(partition, &community))
     }
 
     fn louvain_moves(partition: &Self, resolution: f64, m: f64, gain_treshold: f64) -> Option<Self> {
@@ -204,36 +228,14 @@ impl<'g> PartitionSet<'g> {
                 let curr_comm = community[u];
                 let curr_strength = graph.strength(u);
 
-                let mut max_gain = 0.0;
-                let mut best_comm  = curr_comm;
-
-                // exclude u from the degree count
-                strength_comm[curr_comm] -= curr_strength;
-
-                let community_delta = |c: usize| -> f64 {
-                    let wt = *neig_comm_weights.get(&c).unwrap_or(&0) as f64;
-                    // As mentioned above this is m times the change in modularity
-                    // caused by moving a node out of the community.
-                    -wt + 0.5 * resolution * (strength_comm[c] as f64) * (curr_strength as f64) / m
-                };
-
-                let remove_cost = community_delta(best_comm);
-
-                for &c in neig_comm_weights.keys() {
-                    if c == curr_comm {
-                        continue;
-                    }
-
-                    let gain = remove_cost - community_delta(c);
-
-                    if gain > max_gain {
-                        max_gain = gain;
-                        best_comm = c;
-                    }
-                }
-
-                // increase the degree of best community
-                strength_comm[best_comm] += curr_strength;
+                let (best_comm, max_gain) = Self::best_community_move(
+                    &mut strength_comm,
+                    neig_comm_weights,
+                    curr_comm,
+                    curr_strength,
+                    resolution,
+                    m
+                );
 
                 if best_comm != curr_comm {
                     // a move is performed
@@ -251,33 +253,7 @@ impl<'g> PartitionSet<'g> {
         }
 
         // Compute new partition
-
-        let mut new_community = vec![0; partition.graph.n_nodes];
-        let mut final_tag = HashMap::new();
-        let mut n_partitions = 0;
-
-        for u in 0..partition.graph.n_nodes {
-            let prev_comm = community[partition.community[u]];
-            let new_comm = match final_tag.get(&prev_comm) {
-                Some(new_comm) => *new_comm,
-                None => {
-                    let new_comm = n_partitions;
-                    n_partitions += 1;
-
-                    final_tag.insert(prev_comm, new_comm);
-
-                    new_comm
-                },
-            };
-
-            new_community[u] = new_comm;
-        }
-
-        Some(Self {
-            community: new_community,
-            n_partitions,
-            graph: partition.graph,
-        })
+        Some(Self::compress_partition(partition, &community))
     }
 
     const LOUVAIN_THRESHOLD: f64 = 0.00001;
@@ -304,7 +280,7 @@ impl<'g> PartitionSet<'g> {
         curr
     }
 
-    pub fn community_unchecked(&self, v: usize) -> usize {
+    pub fn community(&self, v: usize) -> usize {
         self.community[v]
     }
 
@@ -350,6 +326,10 @@ impl<'g> PartitionSet<'g> {
     pub fn len(&self) -> usize {
         self.n_partitions
     }
+
+    pub fn graph(&self) -> &Graph {
+        self.graph
+    }
 }
 
 pub struct LouvainBuilder<'g> {
@@ -382,7 +362,7 @@ impl<'g> LouvainBuilder<'g> {
     }
 
     pub fn gain_threshold(mut self, gain_threshold: f64) -> Self {
-        self.gain_threshold = gain_threshold;
+        self.gain_threshold = gain_threshold.max(0.0);
         self
     }
 

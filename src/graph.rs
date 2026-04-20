@@ -1,5 +1,7 @@
 mod parser;
+
 pub mod partition;
+pub mod painter;
 
 use parser::{Parser, ParseError};
 
