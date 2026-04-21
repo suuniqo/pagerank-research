@@ -1,8 +1,8 @@
-mod graph;
+use std::process;
 
-use graph::{Graph, painter::Painter};
+pub mod graph;
 
-use crate::graph::partition::LouvainBuilder;
+use graph::{Graph, painter::Painter, partition::LouvainBuilder};
 
 const DATA_PATH: &str = "data/web-Stanford.mtx";
 
@@ -11,7 +11,10 @@ fn main() {
 
     let graph = match Graph::from_mtx(DATA_PATH) {
         Ok(g) => g,
-        Err(err) => panic!("{err}")
+        Err(err) => {
+            eprintln!("error: {err}");
+            process::exit(1);
+        }
     };
 
     let elapsed = start.elapsed();
@@ -21,7 +24,7 @@ fn main() {
 
     let start = std::time::Instant::now();
 
-    let communities = LouvainBuilder::new(&undirected)
+    let partition = LouvainBuilder::new(&undirected)
         .fast(true)
         .resolution(1.0)
         .gain_threshold(0.0001)
@@ -30,11 +33,17 @@ fn main() {
     let elapsed = start.elapsed();
     println!("louvain method: {} ms", elapsed.as_millis());
 
+    let mut communities: Vec<usize> = partition.communities().into_iter().map(|c| c.len()).collect();
+    communities.sort_by(|c1, c2| c2.cmp(c1));
+
+    let n_comm = communities.len();
+
     println!();
     println!("REPORT:");
-    println!("- communities: \t{}", communities.len());
-    println!("- modularity: \t{}", communities.modularity());
+    println!("- communities: \t{}", partition.len());
+    println!("- modularity: \t{}", partition.modularity());
+    println!("- largest: \t{:?}", &communities[..5.min(n_comm)]);
+    println!("- smallest: \t{:?}", &communities[n_comm.saturating_sub(5)..]);
 
-    Painter::draw_graph(&communities.aggregate_graph(), "out/aggregate.dot");
-    Painter::draw_partition(&communities, "out/partition.dot");
+    Painter::draw_aggregate(&partition, "out/aggregate.dot");
 }

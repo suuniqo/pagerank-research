@@ -28,10 +28,10 @@ pub enum ParseError {
 impl std::fmt::Display for ParseError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            ParseError::Io(error) => writeln!(f, "Io({error})"),
-            ParseError::BadLine(line) => writeln!(f, "BadLine({line})"),
-            ParseError::EmptyBody => writeln!(f, "EmptyBody"),
-            ParseError::TooShort { expected, got } => writeln!(f, "TooShort(expected: {expected}, got: {got})"),
+            ParseError::Io(error) => writeln!(f, "{error}"),
+            ParseError::BadLine(line) => writeln!(f, "failed to parse line: {line}"),
+            ParseError::EmptyBody => writeln!(f, "cannot parse a file without body"),
+            ParseError::TooShort { expected, got } => writeln!(f, "too little edges, expected: {expected}, got: {got}"),
         }
     }
 }

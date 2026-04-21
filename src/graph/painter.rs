@@ -1,7 +1,6 @@
 use std::fs::File;
 use std::io::{BufWriter, Write};
 
-use crate::graph::Graph;
 use crate::graph::partition::PartitionSet;
 
 pub struct Painter;
@@ -35,7 +34,7 @@ impl Painter {
         ((r * 255.0) as u8, (g * 255.0) as u8, (b * 255.0) as u8)
     }
 
-    pub fn draw_graph(g: &Graph, output: &str) {
+    pub fn draw_aggregate(partition: &PartitionSet, output: &str) {
         let mut f = BufWriter::new(File::create(output).unwrap());
 
         writeln!(f, "graph G {{").unwrap();
@@ -53,28 +52,29 @@ impl Painter {
         .unwrap();
 
         // -----------------------------
-        // compute self weights
+        // compute sizes
         // -----------------------------
-        let mut node_weight = vec![0.0f32; g.n_nodes];
+        let comm_sizes = partition
+            .communities()
+            .into_iter()
+            .map(|c| c.len())
+            .collect::<Vec<usize>>();
 
-        for u in 0..g.n_nodes {
-            for &(v, w) in &g.adj_list[u] {
-                if u == v {
-                    node_weight[u] += w as f32;
-                }
-            }
-        }
-
-        let max_w = node_weight.iter().cloned().fold(1.0, f32::max);
+        let max_size = *comm_sizes
+            .iter()
+            .max()
+            .unwrap_or(&1);
 
         // -----------------------------
         // nodes
         // -----------------------------
-        for i in 0..g.n_nodes {
-            let w = node_weight[i];
+        let g = partition.aggregate_graph();
 
-            let width = 0.3 + 2.5 * (w / max_w);
-            let label = format!("{}", w as usize);
+        for i in 0..g.n_nodes {
+            let size = comm_sizes[i];
+
+            let width = 0.3 + 2.5 * (size as f64 / max_size as f64);
+            let label = format!("{}", size as usize);
 
             let color = Self::hsv_hex(i);
 
@@ -127,7 +127,7 @@ impl Painter {
         // layout settings
         writeln!(f, "  layout=sfdp;").unwrap();
         writeln!(f, "  overlap=false;").unwrap();
-        writeln!(f, "  splines=true;").unwrap();
+        writeln!(f, "  splines=curved;").unwrap();
 
         // uniform node style (NO fixedsize needed)
         writeln!(

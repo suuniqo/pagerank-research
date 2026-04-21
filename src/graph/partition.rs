@@ -1,9 +1,6 @@
-use std::borrow::Cow;
-use std::collections::VecDeque;
-use std::{collections::HashMap, vec};
+use std::{collections::{HashMap, VecDeque}, vec, borrow::Cow};
 
-use rand::rng;
-use rand::seq::SliceRandom;
+use rand::{rng, seq::SliceRandom};
 
 use super::Graph;
 
@@ -14,6 +11,9 @@ pub struct PartitionSet<'g> {
 }
 
 impl<'g> PartitionSet<'g> {
+    const LOUVAIN_THRESHOLD: f64 = 1e-5;
+    const LOUVAIN_RESOLUTION: f64 = 1.0;
+
     /// Creates the 'trivial' partition: All nodes in the same community
     pub fn trivial(graph: &'g Graph) -> Self {
         Self {
@@ -32,20 +32,110 @@ impl<'g> PartitionSet<'g> {
         }
     }
 
-    pub fn neighbour_community_weights(graph: &Graph, u: usize, community: &[usize]) -> HashMap<usize, usize> {
-        let mut neig_comm_weights = HashMap::new();
-        let neigs = &graph.adj_list[u];
+    /// Creates a partition using the louvain method, which tries to maximize modularity
+    pub fn from_louvain(
+        graph: &'g Graph,
+        fast: bool,
+        resolution: f64,
+        gain_threshold: f64,
+        max_iter: Option<usize>
+    ) -> Self {
+        let mut iter = 0;
+        let mut curr = Self::singleton(graph);
 
-        for &(v, weight) in neigs {
-            if u == v {
-                continue;
-            }
+        let partition_move = if fast { Self::fast_louvain_moves } else { Self::louvain_moves };
 
-            let cv = community[v];
-            *neig_comm_weights.entry(cv).or_insert(0) += weight;
+        let m = graph.weights().sum::<usize>() as f64 / 2.0;
+
+        while max_iter.is_none_or(|max_iter| iter < max_iter)
+            && let Some(next) = partition_move(&curr, resolution, m, gain_threshold)
+        {
+            curr = next;
+
+            iter += 1;
         }
 
-        neig_comm_weights
+        curr
+    }
+
+    /// Creates a partition using the louvain method, which tries to
+    /// maximize modularity, while preserving community connectivity
+    // pub fn from_leiden(
+    //     graph: &'g Graph,
+    //     resolution: f64,
+    //     temperature: f64,
+    //     gain_threshold: f64,
+    //     max_iter: Option<usize>
+    // ) -> Self {
+    //     let mut iter = 0;
+    //     let mut curr = Self::singleton(graph);
+    //
+    //     let m = graph.weights().sum::<usize>() as f64 / 2.0;
+    //
+    //     while max_iter.is_none_or(|max_iter| iter < max_iter)
+    //         && let Some(next) = Self::fast_louvain_moves(&curr, resolution, m, gain_threshold)
+    //     { 
+    //         curr = next;
+    //
+    //         // refine partition
+    //         todo!();
+    //
+    //         iter += 1;
+    //     }
+    //
+    //     curr
+    // }
+
+
+    pub fn community(&self, v: usize) -> usize {
+        self.community[v]
+    }
+
+    /// Partitions the vertices according to their tags
+    pub fn communities(&self) -> Vec<Vec<usize>> {
+        let mut communities = vec![vec![]; self.n_partitions];
+
+        for (u, tag) in self.community.iter().enumerate() {
+            communities[*tag].push(u);
+        }
+
+        communities
+    }
+
+    /// Computes the modularity of the [PartitionSet]
+    pub fn modularity(&self) -> f64 {
+        let mut e = vec![0; self.n_partitions];
+        let mut a = vec![0; self.n_partitions];
+
+        for (u, neig) in self.graph.adj_list.iter().enumerate() {
+            let cu = self.community[u];
+
+            a[cu] += self.graph.strength(u);
+
+            for &(v, weight) in neig {
+                if self.community[v] == cu {
+                    e[cu] += weight;
+                }
+            }
+        }
+
+        let mut q = 0.0;
+
+        let m2 = self.graph.weights().sum::<usize>();
+
+        for c in 0..self.n_partitions {
+            q += e[c] as f64 - (a[c].pow(2) as f64 / m2 as f64);
+        }
+
+        q / m2 as f64
+    }
+
+    pub fn len(&self) -> usize {
+        self.n_partitions
+    }
+
+    pub fn graph(&self) -> &Graph {
+        self.graph
     }
 
     pub fn aggregate_graph(&self) -> Cow<'g, Graph> {
@@ -74,6 +164,22 @@ impl<'g> PartitionSet<'g> {
             .collect();
 
         Cow::Owned(Graph::new(adj_list))
+    }
+
+    fn neighbour_community_weights(graph: &Graph, u: usize, community: &[usize]) -> HashMap<usize, usize> {
+        let mut neig_comm_weights = HashMap::new();
+        let neigs = &graph.adj_list[u];
+
+        for &(v, weight) in neigs {
+            if u == v {
+                continue;
+            }
+
+            let cv = community[v];
+            *neig_comm_weights.entry(cv).or_insert(0) += weight;
+        }
+
+        neig_comm_weights
     }
 
     fn compress_partition(prev_partition: &Self, community: &[usize]) -> Self {
@@ -112,8 +218,7 @@ impl<'g> PartitionSet<'g> {
         curr_strength: usize,
         resolution: f64,
         m: f64,
-    ) -> (usize, f64)
-    {
+    ) -> (usize, f64) {
         let mut max_gain = 0.0;
         let mut best_comm  = curr_comm;
 
@@ -148,7 +253,7 @@ impl<'g> PartitionSet<'g> {
         (best_comm, max_gain)
     }
 
-    fn fast_louvain_moves(partition: &Self, resolution: f64, m: f64, gain_treshold: f64) -> Option<Self> {
+    fn fast_louvain_moves(partition: &Self, resolution: f64, m: f64, gain_threshold: f64) -> Option<Self> {
         // Community partition
         let graph = partition.aggregate_graph();
         let mut community: Vec<usize> = (0..graph.n_nodes).collect();
@@ -194,7 +299,7 @@ impl<'g> PartitionSet<'g> {
             }
         }
 
-        if total_gain <= m * gain_treshold {
+        if total_gain <= m * gain_threshold {
             return None;
         }
 
@@ -254,81 +359,6 @@ impl<'g> PartitionSet<'g> {
 
         // Compute new partition
         Some(Self::compress_partition(partition, &community))
-    }
-
-    const LOUVAIN_THRESHOLD: f64 = 0.00001;
-    const LOUVAIN_RESOLUTION: f64 = 1.0;
-
-    pub fn from_louvain(graph: &'g Graph, fast: bool, resolution: f64, gain_threshold: f64, max_iter: Option<usize>) -> Self {
-        let mut iter = 0;
-        let mut curr = Self::singleton(graph);
-
-        let partition_move = if fast { Self::fast_louvain_moves } else { Self::louvain_moves };
-
-        let m = graph.weights().sum::<usize>() as f64 / 2.0;
-
-        while let Some(next) = partition_move(&curr, resolution, m, gain_threshold) {
-            if let Some(max_iter) = max_iter && iter > max_iter {
-                break;
-            }
-
-            curr = next;
-
-            iter += 1;
-        }
-
-        curr
-    }
-
-    pub fn community(&self, v: usize) -> usize {
-        self.community[v]
-    }
-
-    /// Partitions the vertices according to their tags
-    pub fn communities(&self) -> Vec<Vec<usize>> {
-        let mut communities = vec![vec![]; self.n_partitions];
-
-        for (u, tag) in self.community.iter().enumerate() {
-            communities[*tag].push(u);
-        }
-
-        communities
-    }
-
-    /// Computes the modularity of the [PartitionSet]
-    pub fn modularity(&self) -> f64 {
-        let mut e = vec![0; self.n_partitions];
-        let mut a = vec![0; self.n_partitions];
-
-        for (u, neig) in self.graph.adj_list.iter().enumerate() {
-            let cu = self.community[u];
-
-            a[cu] += self.graph.strength(u);
-
-            for &(v, weight) in neig {
-                if self.community[v] == cu {
-                    e[cu] += weight;
-                }
-            }
-        }
-
-        let mut q = 0.0;
-
-        let m2 = self.graph.weights().sum::<usize>();
-
-        for c in 0..self.n_partitions {
-            q += e[c] as f64 - (a[c].pow(2) as f64 / m2 as f64);
-        }
-
-        q / m2 as f64
-    }
-
-    pub fn len(&self) -> usize {
-        self.n_partitions
-    }
-
-    pub fn graph(&self) -> &Graph {
-        self.graph
     }
 }
 
