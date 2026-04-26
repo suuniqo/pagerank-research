@@ -28,16 +28,16 @@ impl Graph {
     }
 
     pub fn from_mtx(path: &str) -> Result<Self, ParseError> {
-        let (metadata, edges) = Parser::parse_mtx(path)?;
-        let mut adj_list = vec![vec![]; metadata.nrows];
+        let graph = Parser::parse_mtx(path)?;
+        let mut adj_list = vec![vec![]; graph.nrows];
 
-        for (src, dst) in edges {
+        for (src, dst) in graph.edges {
             adj_list[src].push((dst, 1));
         }
 
         Ok(Self {
-            n_nodes: metadata.nrows,
-            n_edges: metadata.nnz,
+            n_nodes: graph.nrows,
+            n_edges: graph.nnz,
             adj_list
         })
     }

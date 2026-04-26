@@ -4,12 +4,12 @@ pub mod graph;
 
 use graph::{Graph, painter::Painter, partition::LouvainBuilder};
 
-const DATA_PATH: &str = "data/web-Stanford.mtx";
+use crate::graph::parser::Parser;
 
-fn main() {
+fn _test_stanford() {
     let start = std::time::Instant::now();
 
-    let graph = match Graph::from_mtx(DATA_PATH) {
+    let graph = match Graph::from_mtx("data/web-stanford/web-Stanford.mtx") {
         Ok(g) => g,
         Err(err) => {
             eprintln!("error: {err}");
@@ -46,4 +46,26 @@ fn main() {
     println!("- smallest: \t{:?}", &communities[n_comm.saturating_sub(5)..]);
 
     Painter::draw_aggregate(&partition, "out/aggregate.dot");
+}
+
+fn main() {
+    let graph_tsv = match Parser::parse_tsv(
+        "data/wikispeedia/articles.tsv",
+        "data/wikispeedia/categories.tsv",
+        "data/wikispeedia/links.tsv",
+    ) {
+        Ok(g) => g,
+        Err(err) => {
+            eprintln!("error: {err}");
+            process::exit(1);
+        },
+    };
+
+    dbg!(graph_tsv.edges.len());
+    dbg!(graph_tsv.nodes.len());
+    dbg!(&graph_tsv.ids.iter().take(10).collect::<Vec<(&String, &usize)>>());
+    dbg!(&graph_tsv.nodes[..10]);
+    dbg!(&graph_tsv.edges[..10]);
+    dbg!(&graph_tsv.categories[..10]);
+
 }

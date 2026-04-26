@@ -1,18 +1,44 @@
-use std::{fs::File, io::{BufRead, BufReader}};
+use std::{collections::HashMap, fs::File, io::{BufRead, BufReader}};
 
-#[derive(Debug, Clone, Copy)]
-pub struct MtxMetadata {
+#[derive(Debug, Clone)]
+pub struct GraphMTX {
+    pub edges: Vec<(usize, usize)>,
     pub nrows: usize,
     pub ncols: usize,
     pub nnz: usize,
 }
 
-impl MtxMetadata {
-    pub fn new(nrows: usize, ncols: usize, nnz: usize) -> Self {
+impl GraphMTX {
+    pub fn new(edges: Vec<(usize, usize)>, nrows: usize, ncols: usize, nnz: usize) -> Self {
         Self {
+            edges,
             nrows,
             ncols,
             nnz,
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct GraphTSV {
+    pub ids: HashMap<String, usize>,
+    pub nodes: Vec<String>,
+    pub edges: Vec<(usize, usize)>,
+    pub categories: Vec<Vec<Vec<String>>>,
+}
+
+impl GraphTSV {
+    pub fn new(
+        ids: HashMap<String, usize>,
+        nodes: Vec<String>,
+        edges: Vec<(usize, usize)>,
+        categories: Vec<Vec<Vec<String>>>
+    ) -> Self {
+        Self {
+            ids,
+            nodes,
+            edges,
+            categories
         }
     }
 }
@@ -23,6 +49,7 @@ pub enum ParseError {
     BadLine(String),
     EmptyBody,
     TooShort {expected: usize, got: usize},
+    Inconsistent {reason: String, line: String},
 }
 
 impl std::fmt::Display for ParseError {
@@ -32,28 +59,23 @@ impl std::fmt::Display for ParseError {
             ParseError::BadLine(line) => writeln!(f, "failed to parse line: {line}"),
             ParseError::EmptyBody => writeln!(f, "cannot parse a file without body"),
             ParseError::TooShort { expected, got } => writeln!(f, "too little edges, expected: {expected}, got: {got}"),
+            ParseError::Inconsistent { reason, line } => writeln!(f, "{reason}: {line}"),
         }
     }
 }
 
-impl std::error::Error for ParseError { }
+impl std::error::Error for ParseError {}
 
 pub struct Parser;
 
 impl Parser {
-    pub fn parse_mtx(path: &str) -> Result<(MtxMetadata, Vec<(usize, usize)>), ParseError> {
-        let file = File::open(path)
-            .map_err(|e| ParseError::Io(e))?;
-
-        let mut reader = BufReader::new(file);
-        let mut buf = String::new();
-
-        // skip header
+    /// Skips header and keeps in buf the first line that doesnt start with `sym`
+    pub fn skip_header(reader: &mut BufReader<File>, buf: &mut String, sym: char) -> Result<usize, ParseError> {
         loop {
             buf.clear();
 
             let nbytes = reader
-                .read_line(&mut buf)
+                .read_line(buf)
                 .map_err(|e| ParseError::Io(e))?;
 
             if nbytes == 0 {
@@ -66,33 +88,176 @@ impl Parser {
                 continue;
             }
 
-            if !line.starts_with('%'){
+            if !line.starts_with(sym){
+                return Ok(nbytes);
+            }
+        }
+    }
+
+    pub fn parse_tsv(path_articles: &str, path_categories: &str, path_links: &str) -> Result<GraphTSV, ParseError> {
+        let mut buf = String::new();
+
+        // parse articles
+        let mut ids = HashMap::new();
+        let mut nodes = Vec::new();
+
+        let file_articles = File::open(path_articles)
+            .map_err(|e| ParseError::Io(e))?;
+
+        let mut reader = BufReader::new(file_articles);
+
+        let _ = Self::skip_header(&mut reader, &mut buf, '#')?;
+
+        loop {
+            let line = buf.trim();
+
+            if line.is_empty() {
+                return Err(ParseError::BadLine(buf));
+            }
+
+            ids.insert(line.to_string(), nodes.len());
+            nodes.push(line.to_string());
+
+            buf.clear();
+
+            let nbytes = reader
+                .read_line(&mut buf)
+                .map_err(|e| ParseError::Io(e))?;
+
+            if nbytes == 0 {
                 break;
             }
         }
 
-        let mut split = buf.split_whitespace();
+        // parse categories
+        let mut categories = vec![vec![]; nodes.len()];
 
-        // parse metadata
-        let metadata = MtxMetadata::new(
-            split.next()
-                .ok_or(ParseError::BadLine(buf.clone()))?
-                .parse()
-                .map_err(|_| ParseError::BadLine(buf.clone()))?,
-            split.next()
-                .ok_or(ParseError::BadLine(buf.clone()))?
-                .parse()
-                .map_err(|_| ParseError::BadLine(buf.clone()))?,
-            split.next()
-                .ok_or(ParseError::BadLine(buf.clone()))?
-                .parse()
-                .map_err(|_| ParseError::BadLine(buf.clone()))?,
-        );
+        let file_categories = File::open(path_categories)
+            .map_err(|e| ParseError::Io(e))?;
 
-        let mut edges = Vec::with_capacity(metadata.nnz);
+        let mut reader = BufReader::new(file_categories);
+
+        let _ = Self::skip_header(&mut reader, &mut buf, '#')?;
+
+        loop {
+            let line = buf.trim();
+
+            if line.is_empty() {
+                return Err(ParseError::BadLine(buf));
+            }
+
+            let (name, category) = line
+                .split_once('\t')
+                .ok_or(ParseError::BadLine(buf.clone()))?;
+
+            let name_id = ids
+                .get(name)
+                .ok_or(ParseError::Inconsistent {
+                    reason: format!("name {name} not found in nodes"),
+                    line: buf.clone(),
+                })?;
+
+            categories[*name_id].push(
+                category
+                    .split('.')
+                    .skip(1)
+                    .map(|s| s.to_string())
+                    .collect()
+            );
+
+            buf.clear();
+
+            let nbytes = reader
+                .read_line(&mut buf)
+                .map_err(|e| ParseError::Io(e))?;
+
+            if nbytes == 0 {
+                break;
+            }
+        }
 
         // parse edges
-        for i in 0..metadata.nnz {
+        let file_links = File::open(path_links)
+            .map_err(|e| ParseError::Io(e))?;
+
+        let mut reader = BufReader::new(file_links);
+
+        let mut edges = Vec::new();
+
+        let _ = Self::skip_header(&mut reader, &mut buf, '#')?;
+
+        loop {
+            let line = buf.trim();
+
+            if line.is_empty() {
+                return Err(ParseError::BadLine(buf));
+            }
+
+            let (src, dst) = line
+                .split_once('\t')
+                .ok_or(ParseError::BadLine(buf.clone()))?;
+
+            let src_id = ids
+                .get(src)
+                .ok_or(ParseError::Inconsistent {
+                    reason: format!("name {src} not found in nodes"),
+                    line: buf.clone(),
+                })?;
+
+            let dst_id = ids
+                .get(dst)
+                .ok_or(ParseError::Inconsistent {
+                    reason: format!("name {dst} not found in nodes"),
+                    line: buf.clone(),
+                })?;
+
+            edges.push((*src_id, *dst_id));
+
+            buf.clear();
+
+            let nbytes = reader
+                .read_line(&mut buf)
+                .map_err(|e| ParseError::Io(e))?;
+
+            if nbytes == 0 {
+                break;
+            }
+        }
+
+        Ok(GraphTSV::new(ids, nodes, edges, categories))
+    }
+
+    pub fn parse_mtx(path: &str) -> Result<GraphMTX, ParseError> {
+        let file = File::open(path)
+            .map_err(|e| ParseError::Io(e))?;
+
+        let mut reader = BufReader::new(file);
+        let mut buf = String::new();
+
+        // skip header
+        let _ = Self::skip_header(&mut reader, &mut buf, '%')?;
+
+        let mut split = buf.split_whitespace();
+
+        let nrows = split.next()
+            .ok_or(ParseError::BadLine(buf.clone()))?
+            .parse()
+            .map_err(|_| ParseError::BadLine(buf.clone()))?;
+
+        let ncols = split.next()
+            .ok_or(ParseError::BadLine(buf.clone()))?
+            .parse()
+            .map_err(|_| ParseError::BadLine(buf.clone()))?;
+
+        let nnz = split.next()
+            .ok_or(ParseError::BadLine(buf.clone()))?
+            .parse()
+            .map_err(|_| ParseError::BadLine(buf.clone()))?;
+
+        let mut edges = Vec::with_capacity(nnz);
+
+        // parse edges
+        for i in 0..nnz {
             buf.clear();
 
             let nbytes = reader.read_line(&mut buf)
@@ -100,7 +265,7 @@ impl Parser {
 
             if nbytes == 0 {
                 return Err(ParseError::TooShort {
-                    expected: metadata.nnz,
+                    expected: nnz,
                     got: i
                 });
             }
@@ -114,7 +279,7 @@ impl Parser {
             ));
         }
 
-        Ok((metadata, edges))
+        Ok(GraphMTX::new(edges, nrows, ncols, nnz))
     }
 
 }
