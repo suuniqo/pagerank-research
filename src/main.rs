@@ -1,15 +1,14 @@
-use std::process;
+use std::{collections::HashMap, process};
 
 pub mod graph;
 
-use graph::{Graph, painter::Painter, partition::LouvainBuilder};
-
-use crate::graph::parser::Parser;
+use graph::{Graph, painter::Painter, partition::{LouvainBuilder, PartitionSet}};
+use graph::parser::GraphTSV;
 
 fn _test_stanford() {
     let start = std::time::Instant::now();
 
-    let graph = match Graph::from_mtx("data/web-stanford/web-Stanford.mtx") {
+    let (graph, _) = match Graph::from_mtx("data/web-stanford/web-Stanford.mtx") {
         Ok(g) => g,
         Err(err) => {
             eprintln!("error: {err}");
@@ -49,23 +48,81 @@ fn _test_stanford() {
 }
 
 fn main() {
-    let graph_tsv = match Parser::parse_tsv(
+    let start = std::time::Instant::now();
+
+    let (graph, tsv_info) = match Graph::from_tsv(
         "data/wikispeedia/articles.tsv",
         "data/wikispeedia/categories.tsv",
-        "data/wikispeedia/links.tsv",
+        "data/wikispeedia/links.tsv"
     ) {
         Ok(g) => g,
         Err(err) => {
             eprintln!("error: {err}");
             process::exit(1);
-        },
+        }
     };
 
-    dbg!(graph_tsv.edges.len());
-    dbg!(graph_tsv.nodes.len());
-    dbg!(&graph_tsv.ids.iter().take(10).collect::<Vec<(&String, &usize)>>());
-    dbg!(&graph_tsv.nodes[..10]);
-    dbg!(&graph_tsv.edges[..10]);
-    dbg!(&graph_tsv.categories[..10]);
+    let elapsed = start.elapsed();
+    println!("process matrix: {} ms", elapsed.as_millis());
 
+    let undirected = graph.make_undirected();
+
+    let start = std::time::Instant::now();
+
+    let partition = LouvainBuilder::new(&undirected)
+        .fast(true)
+        .resolution(2.0)
+        .gain_threshold(0.0001)
+        .run();
+
+    let elapsed = start.elapsed();
+    println!("louvain method: {} ms", elapsed.as_millis());
+
+    let mut communities: Vec<usize> = partition.communities().into_iter().map(|c| c.len()).collect();
+    communities.sort_by(|c1, c2| c2.cmp(c1));
+
+    let n_comm = communities.len();
+
+    println!();
+    println!("REPORT:");
+    println!("- communities: \t{}", partition.len());
+    println!("- modularity: \t{}", partition.modularity());
+    println!("- largest: \t{:?}", &communities[..5.min(n_comm)]);
+    println!("- smallest: \t{:?}", &communities[n_comm.saturating_sub(5)..]);
+
+    let frequencies = community_frequencies(&tsv_info, &partition);
+
+    for (comm, (comm_f, total)) in frequencies.into_iter().enumerate() {
+        let total = total as f64;
+        let mut sorted = comm_f.into_iter()
+            .map(|(word, count)| (word, (count as f64) / total))
+            .collect::<Vec<_>>();
+        sorted.sort_by(|(_, x), (_, y)| y.partial_cmp(x).unwrap());
+        println!("{comm}:{:?}", &sorted[..5.min(sorted.len())]);
+    }
+
+    Painter::draw_aggregate(&partition, "out/wikispeedia/aggregate.dot");
+}
+
+fn community_frequencies(info: &GraphTSV, partitions: &PartitionSet) -> Vec<(HashMap<String, usize>, usize)> {
+    let mut frequencies = vec![(HashMap::new(), 0); partitions.len()];
+    
+    for node in 0..info.nodes.len() {
+        let comm = partitions.community(node);
+
+        let (temp, count) = &mut frequencies[comm];
+
+        for category in &info.categories[node] {
+            // for word in category {
+            if let Some(word) = category.last() {
+                for token in word.split("_") {
+                    temp.entry(token.to_string()).and_modify(|x| {*x += 1}).or_insert(1);
+                    *count += 1;
+                }
+            }
+        }
+
+    }
+
+    frequencies
 }

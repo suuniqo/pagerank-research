@@ -387,7 +387,9 @@ impl<'g> LouvainBuilder<'g> {
     }
 
     pub fn resolution(mut self, resolution: f64) -> Self {
-        self.resolution = resolution.clamp(0.0, 1.0);
+        // TODO
+        // self.resolution = resolution.clamp(0.0, 1.0);
+        self.resolution = resolution;
         self
     }
 

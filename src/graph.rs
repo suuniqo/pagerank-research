@@ -2,7 +2,7 @@ pub mod painter;
 pub mod parser;
 pub mod partition;
 
-use parser::{Parser, ParseError};
+use parser::{Parser, GraphMTX, GraphTSV, ParseError};
 
 #[derive(Debug, Clone)]
 pub struct Graph {
@@ -27,19 +27,35 @@ impl Graph {
         }
     }
 
-    pub fn from_mtx(path: &str) -> Result<Self, ParseError> {
+    pub fn from_mtx(path: &str) -> Result<(Self, GraphMTX), ParseError> {
         let graph = Parser::parse_mtx(path)?;
         let mut adj_list = vec![vec![]; graph.nrows];
 
-        for (src, dst) in graph.edges {
+        for &(src, dst) in &graph.edges {
             adj_list[src].push((dst, 1));
         }
 
-        Ok(Self {
+        Ok((Self {
             n_nodes: graph.nrows,
             n_edges: graph.nnz,
             adj_list
-        })
+        }, graph))
+    }
+
+    pub fn from_tsv(path_articles: &str, path_categories: &str, path_links: &str) -> Result<(Self, GraphTSV), ParseError> {
+        let graph = Parser::parse_tsv(path_articles, path_categories, path_links)?;
+
+        let mut adj_list = vec![vec![]; graph.nodes.len()];
+
+        for &(src, dst) in &graph.edges {
+            adj_list[src].push((dst, 1));
+        }
+
+        Ok((Self {
+            n_nodes: graph.nodes.len(),
+            n_edges: graph.edges.len(),
+            adj_list
+        }, graph))
     }
 
     pub fn n_nodes(&self) -> usize {
