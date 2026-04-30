@@ -4,13 +4,15 @@ pub mod graph;
 pub mod matrix;
 pub mod parser;
 
+use parser::GraphTSV;
 use graph::{Graph, painter::Painter, partition::{LouvainBuilder, PartitionSet}};
-use graph::parser::GraphTSV;
+
+use crate::matrix::Matrix;
 
 fn _test_stanford() {
     let start = std::time::Instant::now();
 
-    let (graph, _) = match Graph::from_mtx("data/web-stanford/web-Stanford.mtx") {
+    let (graph, _) = match Graph::from_mtx("data/web-stanford/links.mtx") {
         Ok(g) => g,
         Err(err) => {
             eprintln!("error: {err}");
@@ -139,4 +141,33 @@ fn _test_wikispeedia() {
 }
 
 fn main() {
+    let start = std::time::Instant::now();
+
+    let (mat, _) = match Matrix::from_mtx("data/web-stanford/links.mtx") {
+        Ok(g) => g,
+        Err(err) => {
+            eprintln!("error: {err}");
+            process::exit(1);
+        }
+    };
+
+    let elapsed = start.elapsed();
+    println!("process matrix: {} ms", elapsed.as_millis());
+
+    let start = std::time::Instant::now();
+
+    let (rank, precision) = mat.pagerank(0.85, 50);
+
+    let elapsed = start.elapsed();
+    println!("pagerank: {} ms", elapsed.as_millis());
+
+    let mut rank = rank.iter().copied().collect::<Vec<f64>>();
+
+    rank.sort_by(|a, b| b.partial_cmp(&a).unwrap());
+
+    println!();
+    println!("REPORT:");
+    println!("- precision: \t{}", precision);
+    println!("- ranking: \t{:?}", &rank[..10]);
+
 }
