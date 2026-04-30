@@ -1,6 +1,7 @@
 use std::{collections::HashMap, process};
 
 pub mod graph;
+pub mod pagerank;
 
 use graph::{Graph, painter::Painter, partition::{LouvainBuilder, PartitionSet}};
 use graph::parser::GraphTSV;
