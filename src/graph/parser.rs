@@ -1,5 +1,7 @@
 use std::{collections::HashMap, fs::File, io::{BufRead, BufReader}};
 
+use crate::parser::{Parser, ParseError};
+
 #[derive(Debug, Clone)]
 pub struct GraphMTX {
     pub edges: Vec<(usize, usize)>,
@@ -43,57 +45,9 @@ impl GraphTSV {
     }
 }
 
-#[derive(Debug)]
-pub enum ParseError {
-    Io(std::io::Error),
-    BadLine(String),
-    EmptyBody,
-    TooShort {expected: usize, got: usize},
-    Inconsistent {reason: String, line: String},
-}
+pub struct GraphParser;
 
-impl std::fmt::Display for ParseError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            ParseError::Io(error) => writeln!(f, "{error}"),
-            ParseError::BadLine(line) => writeln!(f, "failed to parse line: {line}"),
-            ParseError::EmptyBody => writeln!(f, "cannot parse a file without body"),
-            ParseError::TooShort { expected, got } => writeln!(f, "too little edges, expected: {expected}, got: {got}"),
-            ParseError::Inconsistent { reason, line } => writeln!(f, "{reason}: {line}"),
-        }
-    }
-}
-
-impl std::error::Error for ParseError {}
-
-pub struct Parser;
-
-impl Parser {
-    /// Skips header and keeps in buf the first line that doesnt start with `sym`
-    pub fn skip_header(reader: &mut BufReader<File>, buf: &mut String, sym: char) -> Result<usize, ParseError> {
-        loop {
-            buf.clear();
-
-            let nbytes = reader
-                .read_line(buf)
-                .map_err(|e| ParseError::Io(e))?;
-
-            if nbytes == 0 {
-                return Err(ParseError::EmptyBody);
-            }
-
-            let line = buf.trim();
-
-            if line.is_empty() {
-                continue;
-            }
-
-            if !line.starts_with(sym){
-                return Ok(nbytes);
-            }
-        }
-    }
-
+impl GraphParser {
     pub fn parse_tsv(path_articles: &str, path_categories: &str, path_links: &str) -> Result<GraphTSV, ParseError> {
         let mut buf = String::new();
 
@@ -106,7 +60,7 @@ impl Parser {
 
         let mut reader = BufReader::new(file_articles);
 
-        let _ = Self::skip_header(&mut reader, &mut buf, '#')?;
+        let _ = Parser::skip_header(&mut reader, &mut buf, '#')?;
 
         loop {
             let line = buf.trim();
@@ -137,7 +91,7 @@ impl Parser {
 
         let mut reader = BufReader::new(file_categories);
 
-        let _ = Self::skip_header(&mut reader, &mut buf, '#')?;
+        let _ = Parser::skip_header(&mut reader, &mut buf, '#')?;
 
         loop {
             let line = buf.trim();
@@ -184,7 +138,7 @@ impl Parser {
 
         let mut edges = Vec::new();
 
-        let _ = Self::skip_header(&mut reader, &mut buf, '#')?;
+        let _ = Parser::skip_header(&mut reader, &mut buf, '#')?;
 
         loop {
             let line = buf.trim();
@@ -235,7 +189,7 @@ impl Parser {
         let mut buf = String::new();
 
         // skip header
-        let _ = Self::skip_header(&mut reader, &mut buf, '%')?;
+        let _ = Parser::skip_header(&mut reader, &mut buf, '%')?;
 
         let mut split = buf.split_whitespace();
 
@@ -281,5 +235,4 @@ impl Parser {
 
         Ok(GraphMTX::new(edges, nrows, ncols, nnz))
     }
-
 }

@@ -1,7 +1,8 @@
 use std::{collections::HashMap, process};
 
 pub mod graph;
-pub mod pagerank;
+pub mod matrix;
+pub mod parser;
 
 use graph::{Graph, painter::Painter, partition::{LouvainBuilder, PartitionSet}};
 use graph::parser::GraphTSV;
@@ -138,5 +139,4 @@ fn _test_wikispeedia() {
 }
 
 fn main() {
-    _test_wikispeedia();
 }

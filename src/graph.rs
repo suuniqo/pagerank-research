@@ -2,7 +2,8 @@ pub mod painter;
 pub mod parser;
 pub mod partition;
 
-use parser::{Parser, GraphMTX, GraphTSV, ParseError};
+use crate::parser::error::ParseError;
+use parser::{GraphParser, GraphMTX, GraphTSV};
 
 #[derive(Debug, Clone)]
 pub struct Graph {
@@ -28,7 +29,7 @@ impl Graph {
     }
 
     pub fn from_mtx(path: &str) -> Result<(Self, GraphMTX), ParseError> {
-        let graph = Parser::parse_mtx(path)?;
+        let graph = GraphParser::parse_mtx(path)?;
         let mut adj_list = vec![vec![]; graph.nrows];
 
         for &(src, dst) in &graph.edges {
@@ -43,7 +44,7 @@ impl Graph {
     }
 
     pub fn from_tsv(path_articles: &str, path_categories: &str, path_links: &str) -> Result<(Self, GraphTSV), ParseError> {
-        let graph = Parser::parse_tsv(path_articles, path_categories, path_links)?;
+        let graph = GraphParser::parse_tsv(path_articles, path_categories, path_links)?;
 
         let mut adj_list = vec![vec![]; graph.nodes.len()];
 
