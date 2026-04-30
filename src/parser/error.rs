@@ -1,3 +1,5 @@
+use faer::sparse::CreationError;
+
 #[derive(Debug)]
 pub enum ParseError {
     Io(std::io::Error),
@@ -5,6 +7,7 @@ pub enum ParseError {
     EmptyBody,
     TooShort {expected: usize, got: usize},
     Inconsistent {reason: String, line: String},
+    MatrixError(CreationError),
 }
 
 impl std::fmt::Display for ParseError {
@@ -15,6 +18,7 @@ impl std::fmt::Display for ParseError {
             ParseError::EmptyBody => writeln!(f, "cannot parse a file without body"),
             ParseError::TooShort { expected, got } => writeln!(f, "too little edges, expected: {expected}, got: {got}"),
             ParseError::Inconsistent { reason, line } => writeln!(f, "{reason}: {line}"),
+            ParseError::MatrixError(err) => writeln!(f, "faer error: {err}")
         }
     }
 }

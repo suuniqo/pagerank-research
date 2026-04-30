@@ -1,141 +1,110 @@
+use std::collections::HashMap;
+use std::fs::File;
+use std::io::{BufRead, BufReader};
+
+use crate::parser::{Parser, ParseError};
+
+use faer::sparse::{SparseColMat, Triplet};
+
 pub struct MatrixParser;
 
 impl MatrixParser {
-    // pub fn parse_tsv(path_articles: &str, path_categories: &str, path_links: &str) -> Result<GraphTSV, ParseError> {
-    //     let mut buf = String::new();
-    //
-    //     // parse articles
-    //     let mut ids = HashMap::new();
-    //     let mut nodes = Vec::new();
-    //
-    //     let file_articles = File::open(path_articles)
-    //         .map_err(|e| ParseError::Io(e))?;
-    //
-    //     let mut reader = BufReader::new(file_articles);
-    //
-    //     let _ = Parser::skip_header(&mut reader, &mut buf, '#')?;
-    //
-    //     loop {
-    //         let line = buf.trim();
-    //
-    //         if line.is_empty() {
-    //             return Err(ParseError::BadLine(buf));
-    //         }
-    //
-    //         ids.insert(line.to_string(), nodes.len());
-    //         nodes.push(line.to_string());
-    //
-    //         buf.clear();
-    //
-    //         let nbytes = reader
-    //             .read_line(&mut buf)
-    //             .map_err(|e| ParseError::Io(e))?;
-    //
-    //         if nbytes == 0 {
-    //             break;
-    //         }
-    //     }
-    //
-    //     // parse categories
-    //     let mut categories = vec![vec![]; nodes.len()];
-    //
-    //     let file_categories = File::open(path_categories)
-    //         .map_err(|e| ParseError::Io(e))?;
-    //
-    //     let mut reader = BufReader::new(file_categories);
-    //
-    //     let _ = Parser::skip_header(&mut reader, &mut buf, '#')?;
-    //
-    //     loop {
-    //         let line = buf.trim();
-    //
-    //         if line.is_empty() {
-    //             return Err(ParseError::BadLine(buf));
-    //         }
-    //
-    //         let (name, category) = line
-    //             .split_once('\t')
-    //             .ok_or(ParseError::BadLine(buf.clone()))?;
-    //
-    //         let name_id = ids
-    //             .get(name)
-    //             .ok_or(ParseError::Inconsistent {
-    //                 reason: format!("name {name} not found in nodes"),
-    //                 line: buf.clone(),
-    //             })?;
-    //
-    //         categories[*name_id].push(
-    //             category
-    //                 .split('.')
-    //                 .skip(1)
-    //                 .map(|s| s.to_string())
-    //                 .collect()
-    //         );
-    //
-    //         buf.clear();
-    //
-    //         let nbytes = reader
-    //             .read_line(&mut buf)
-    //             .map_err(|e| ParseError::Io(e))?;
-    //
-    //         if nbytes == 0 {
-    //             break;
-    //         }
-    //     }
-    //
-    //     // parse edges
-    //     let file_links = File::open(path_links)
-    //         .map_err(|e| ParseError::Io(e))?;
-    //
-    //     let mut reader = BufReader::new(file_links);
-    //
-    //     let mut edges = Vec::new();
-    //
-    //     let _ = Parser::skip_header(&mut reader, &mut buf, '#')?;
-    //
-    //     loop {
-    //         let line = buf.trim();
-    //
-    //         if line.is_empty() {
-    //             return Err(ParseError::BadLine(buf));
-    //         }
-    //
-    //         let (src, dst) = line
-    //             .split_once('\t')
-    //             .ok_or(ParseError::BadLine(buf.clone()))?;
-    //
-    //         let src_id = ids
-    //             .get(src)
-    //             .ok_or(ParseError::Inconsistent {
-    //                 reason: format!("name {src} not found in nodes"),
-    //                 line: buf.clone(),
-    //             })?;
-    //
-    //         let dst_id = ids
-    //             .get(dst)
-    //             .ok_or(ParseError::Inconsistent {
-    //                 reason: format!("name {dst} not found in nodes"),
-    //                 line: buf.clone(),
-    //             })?;
-    //
-    //         edges.push((*src_id, *dst_id));
-    //
-    //         buf.clear();
-    //
-    //         let nbytes = reader
-    //             .read_line(&mut buf)
-    //             .map_err(|e| ParseError::Io(e))?;
-    //
-    //         if nbytes == 0 {
-    //             break;
-    //         }
-    //     }
-    //
-    //     Ok(GraphTSV::new(ids, nodes, edges, categories))
-    // }
-    //
-    //
-    pub fn parse_mtx(path: &str) -> Result<GraphMTX, ParseError> {
+    pub fn parse_tsv(
+        path_articles: &str, 
+        path_links: &str
+    ) -> Result<SparseColMat<usize, f64>, ParseError> 
+    {
+        let mut buf = String::new();
+    
+        // count the number of nodes 
+        let mut ids = HashMap::new();
+        let mut nodes = Vec::new();
+        
+        let file_articles = File::open(path_articles)
+            .map_err(|e| ParseError::Io(e))?;
+    
+        let mut reader = BufReader::new(file_articles);
+    
+        let _ = Parser::skip_header(&mut reader, &mut buf, '#')?;
+    
+        loop {
+            let line = buf.trim();
+    
+            if line.is_empty() {
+                return Err(ParseError::BadLine(buf));
+            }
+            
+            ids.insert(line.to_string(), nodes.len());
+            nodes.push(line.to_string());
+
+            buf.clear();
+    
+            let nbytes = reader
+                .read_line(&mut buf)
+                .map_err(|e| ParseError::Io(e))?;
+    
+            if nbytes == 0 {
+                break;
+            }
+        }
+    
+        // parse edges
+        let file_links = File::open(path_links)
+            .map_err(|e| ParseError::Io(e))?;
+    
+        let mut reader = BufReader::new(file_links);
+    
+        let mut triplets = Vec::new();
+    
+        let _ = Parser::skip_header(&mut reader, &mut buf, '#')?;
+    
+        loop {
+            let line = buf.trim();
+    
+            if line.is_empty() {
+                return Err(ParseError::BadLine(buf));
+            }
+    
+            let (src, dst) = line
+                .split_once('\t')
+                .ok_or(ParseError::BadLine(buf.clone()))?;
+    
+            let src_id = ids
+                .get(src)
+                .ok_or(ParseError::Inconsistent {
+                    reason: format!("name {src} not found in nodes"),
+                    line: buf.clone(),
+                })?;
+    
+            let dst_id = ids
+                .get(dst)
+                .ok_or(ParseError::Inconsistent {
+                    reason: format!("name {dst} not found in nodes"),
+                    line: buf.clone(),
+                })?;
+    
+            triplets.push(Triplet::new(*dst_id, *src_id, 1.0));
+    
+            buf.clear();
+    
+            let nbytes = reader
+                .read_line(&mut buf)
+                .map_err(|e| ParseError::Io(e))?;
+    
+            if nbytes == 0 {
+                break;
+            }
+        }
+
+        let n_nodes = nodes.len();
+        let mat = SparseColMat::try_new_from_triplets(n_nodes, n_nodes, &triplets)
+            .map_err(|err| ParseError::MatrixError(err))?;
+
+        Ok(mat)
+    }
+    
+    
+    pub fn parse_mtx(path: &str) -> Result<SparseColMat<usize, f64>, ParseError> {
         let file = File::open(path)
             .map_err(|e| ParseError::Io(e))?;
 
@@ -162,7 +131,7 @@ impl MatrixParser {
             .parse()
             .map_err(|_| ParseError::BadLine(buf.clone()))?;
 
-        let mut edges = Vec::with_capacity(nnz);
+        let mut triplets = Vec::with_capacity(nnz);
 
         // parse edges
         for i in 0..nnz {
@@ -181,12 +150,18 @@ impl MatrixParser {
             let (src, dst) = buf.trim().split_once(' ')
                 .ok_or(ParseError::BadLine(buf.clone()))?;
 
-            edges.push((
-                src.parse::<usize>().map_err(|_| ParseError::BadLine(buf.clone()))? - 1,
-                dst.parse::<usize>().map_err(|_| ParseError::BadLine(buf.clone()))? - 1,
-            ));
+            triplets.push(
+                Triplet::new(
+                    dst.parse::<usize>().map_err(|_| ParseError::BadLine(buf.clone()))? - 1,
+                    src.parse::<usize>().map_err(|_| ParseError::BadLine(buf.clone()))? - 1,
+                    1.0
+                )
+            );
         }
 
-        Ok(GraphMTX::new(edges, nrows, ncols, nnz))
+        let mat = SparseColMat::try_new_from_triplets(nrows, ncols, &triplets)
+            .map_err(|err| ParseError::MatrixError(err))?;
+
+        Ok(mat)
     }
 }
