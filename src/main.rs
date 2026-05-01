@@ -7,7 +7,7 @@ pub mod parser;
 use parser::GraphTSV;
 use graph::{Graph, painter::Painter, partition::{LouvainBuilder, PartitionSet}};
 
-use crate::matrix::Matrix;
+use crate::matrix::{Matrix, PagerankBuilder};
 
 fn _test_lvn_stanford() {
     let start = std::time::Instant::now();
@@ -45,7 +45,7 @@ fn _test_lvn_stanford() {
     println!("REPORT:");
     println!("- communities: \t{}", partition.len());
     println!("- modularity: \t{}", partition.modularity());
-    println!("- largest: \t{:?}", &communities[..5.min(n_comm)]);
+    println!("- tolerance: \t{:?}", &communities[..5.min(n_comm)]);
     println!("- smallest: \t{:?}", &communities[n_comm.saturating_sub(5)..]);
 
     Painter::draw_aggregate(&partition, "out/aggregate.dot");
@@ -156,7 +156,10 @@ fn _test_pgr_stanford() {
 
     let start = std::time::Instant::now();
 
-    let (rank, precision) = mat.pagerank(0.85, 50);
+    let (rank, tol) = PagerankBuilder::new(mat)
+        .alpha(0.85)
+        .tolerance(0.0001)
+        .run();
 
     let elapsed = start.elapsed();
     println!("pagerank: {} ms", elapsed.as_millis());
@@ -169,7 +172,7 @@ fn _test_pgr_stanford() {
 
     println!();
     println!("REPORT:");
-    println!("- precision: \t{}", precision);
+    println!("- precision: \t{}", tol);
     println!("- ranking: \t{:?}", &rank[..10]);
 }
 
@@ -193,7 +196,10 @@ fn _test_pgr_wikispeedia() {
 
     let start = std::time::Instant::now();
 
-    let (rank, precision) = mat.pagerank(0.85, 100);
+    let (rank, tol) = PagerankBuilder::new(mat)
+        .alpha(0.85)
+        .tolerance(0.0001)
+        .run();
 
     let elapsed = start.elapsed();
     println!("pagerank: {} ms", elapsed.as_millis());
@@ -215,7 +221,7 @@ fn _test_pgr_wikispeedia() {
 
     println!();
     println!("REPORT:");
-    println!("- precision: \t{}", precision);
+    println!("- tolerance: \t{}", tol);
     println!("- ranking sum: \t{}", sum);
     println!("- ranking: \t{{");
     for nr in named_ranks.iter().take(10) {
@@ -225,5 +231,6 @@ fn _test_pgr_wikispeedia() {
 }
 
 fn main() {
+    _test_lvn_stanford();
     _test_pgr_wikispeedia();
 }

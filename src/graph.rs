@@ -16,7 +16,7 @@ impl Graph {
         let n_edges = adj_list
             .iter()
             .map(|adj| adj.len())
-            .sum::<usize>() / 2;
+            .sum::<usize>();
 
         let n_nodes = adj_list.len();
 
@@ -64,6 +64,10 @@ impl Graph {
 
     pub fn n_edges(&self) -> usize {
         self.n_edges
+    }
+
+    pub fn adj_list(&self) -> &Vec<Vec<(usize, usize)>> {
+        &self.adj_list
     }
 
     pub fn neighbours(&self, u: usize) -> &[(usize, usize)] {

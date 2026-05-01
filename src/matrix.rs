@@ -1,6 +1,6 @@
-use faer::{Col, sparse::{SparseColMat, Triplet}};
+use faer::{Col, sparse::{CreationError, SparseColMat, Triplet}};
 
-use crate::parser::{GraphMTX, GraphTSV, Parser, ParseError};
+use crate::{graph::Graph, parser::{GraphMTX, GraphTSV, ParseError, Parser}};
 
 pub mod pagerank;
 
@@ -49,11 +49,32 @@ impl Matrix {
         Ok((Self::new(mat), graph))
     }
 
+    pub fn from_graph(graph: Graph) -> Result<Self, CreationError> {
+        let mut triplets = Vec::with_capacity(graph.n_edges());
+
+        for (src, dsts) in graph.adj_list().iter().enumerate() {
+            for (dst, weight) in dsts {
+                triplets.push(Triplet::new(*dst, src, *weight as f64));
+            }
+        }
+
+        let mat = SparseColMat::try_new_from_triplets(
+            graph.n_nodes(),
+            graph.n_nodes(),
+            &triplets
+        );
+
+        mat.map(|mat| Matrix::new(mat))
+    }
+
+
+    const PAGERANK_ALPHA: f64 = 0.85;
 
     pub fn pagerank(
         self,
         alpha: f64, 
-        n_iter: usize
+        tol: f64,
+        max_iter: Option<usize>
     ) -> (Col<f64>, f64) {
         let mut a = self.inner;
 
@@ -91,20 +112,70 @@ impl Matrix {
         let mut r: Col<f64> = Col::zeros(n);
         r[0] = 1.0;
 
-        for _ in 0..n_iter {
+        let mut iter = 0;
+
+        while max_iter.is_none_or(|max_iter| iter < max_iter) {
             r = &r / r.norm_l2();
 
             let vr = &v * &r;
             r_next = alpha * &a * &r + (&e * vr) / nf;
 
+            if (&r_next - &r).norm_l2() <= tol {
+                break;
+            }
+
             std::mem::swap(&mut r, &mut r_next);
+
+            iter += 1;
         }
 
-        // 6. Compute precision
+        // 6. Compute tolerance
         let vr = &v * &r;
-        let next_r = alpha * &a * &r + (&e * vr) / nf;
-        let precicion = (next_r - &r).norm_l2();
+        r_next = alpha * &a * &r + (&e * vr) / nf;
+
+        let tol = (r_next - &r).norm_l2();
         
-        (r, precicion)
+        (r, tol)
     }
 } 
+
+pub struct PagerankBuilder {
+    mat: Matrix,
+    alpha: f64,
+    tol: f64,
+    max_iter: Option<usize>,
+}
+
+impl PagerankBuilder {
+    pub fn new(mat: Matrix) -> Self {
+        Self {
+            mat,
+            alpha: Matrix::PAGERANK_ALPHA,
+            tol: 0.0,
+            max_iter: None,
+        }
+    }
+
+    pub fn alpha(mut self, alpha: f64) -> Self {
+        self.alpha = alpha.clamp(0.0, 1.0);
+        self
+    }
+
+    pub fn tolerance(mut self, tol: f64) -> Self {
+        self.tol = tol.max(0.0);
+        self
+    }
+
+    pub fn max_iter(mut self, max_iter: usize) -> Self {
+        self.max_iter = Some(max_iter);
+        self
+    }
+
+    pub fn run(self) -> (Col<f64>, f64) {
+        self.mat.pagerank(
+            self.alpha,
+            self.tol,
+            self.max_iter
+        )
+    }
+}
