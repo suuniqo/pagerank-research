@@ -2,8 +2,6 @@ use faer::{Col, sparse::{CreationError, SparseColMat, Triplet}};
 
 use crate::{graph::Graph, parser::{GraphMTX, GraphTSV, ParseError, Parser}};
 
-pub mod pagerank;
-
 pub struct Matrix {
     inner: SparseColMat<usize, f64>
 }
@@ -49,7 +47,7 @@ impl Matrix {
         Ok((Self::new(mat), graph))
     }
 
-    pub fn from_graph(graph: Graph) -> Result<Self, CreationError> {
+    pub fn from_graph(graph: &Graph) -> Result<Self, CreationError> {
         let mut triplets = Vec::with_capacity(graph.n_edges());
 
         for (src, dsts) in graph.adj_list().iter().enumerate() {
@@ -138,6 +136,12 @@ impl Matrix {
         (r, tol)
     }
 } 
+
+impl Graph {
+    pub fn conn_matrix(&self) -> Result<Matrix, CreationError> {
+        Matrix::from_graph(self)
+    }
+}
 
 pub struct PagerankBuilder {
     mat: Matrix,
