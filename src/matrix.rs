@@ -1,9 +1,15 @@
-use faer::{Col, sparse::{CreationError, SparseColMat, Triplet}};
+use faer::{
+    Col,
+    sparse::{CreationError, SparseColMat, Triplet},
+};
 
-use crate::{graph::Graph, parser::{GraphMTX, GraphTSV, ParseError, Parser}};
+use crate::{
+    graph::Graph,
+    parser::{GraphMTX, GraphTSV, ParseError, Parser},
+};
 
 pub struct Matrix {
-    inner: SparseColMat<usize, f64>
+    inner: SparseColMat<usize, f64>,
 }
 
 impl Matrix {
@@ -20,16 +26,17 @@ impl Matrix {
             .map(|&(src, dst)| Triplet::new(dst, src, 1.0))
             .collect();
 
-        let mat = SparseColMat::try_new_from_triplets(
-            graph.nrows,
-            graph.ncols,
-            &triplets,
-        ).map_err(ParseError::MatrixError)?;
+        let mat = SparseColMat::try_new_from_triplets(graph.nrows, graph.ncols, &triplets)
+            .map_err(ParseError::MatrixError)?;
 
         Ok((Self::new(mat), graph))
     }
 
-    pub fn from_tsv(path_articles: &str, path_categories: &str, path_links: &str) -> Result<(Self, GraphTSV), ParseError> {
+    pub fn from_tsv(
+        path_articles: &str,
+        path_categories: &str,
+        path_links: &str,
+    ) -> Result<(Self, GraphTSV), ParseError> {
         let graph = Parser::parse_tsv(path_articles, path_categories, path_links)?;
 
         let triplets: Vec<Triplet<usize, usize, f64>> = graph
@@ -38,11 +45,9 @@ impl Matrix {
             .map(|&(src, dst)| Triplet::new(dst, src, 1.0))
             .collect();
 
-        let mat = SparseColMat::try_new_from_triplets(
-            graph.nodes.len(),
-            graph.nodes.len(),
-            &triplets,
-        ).map_err(ParseError::MatrixError)?;
+        let mat =
+            SparseColMat::try_new_from_triplets(graph.nodes.len(), graph.nodes.len(), &triplets)
+                .map_err(ParseError::MatrixError)?;
 
         Ok((Self::new(mat), graph))
     }
@@ -56,23 +61,14 @@ impl Matrix {
             }
         }
 
-        let mat = SparseColMat::try_new_from_triplets(
-            graph.n_nodes(),
-            graph.n_nodes(),
-            &triplets
-        );
+        let mat = SparseColMat::try_new_from_triplets(graph.n_nodes(), graph.n_nodes(), &triplets);
 
         mat.map(Matrix::new)
     }
 
     const PAGERANK_ALPHA: f64 = 0.85;
 
-    pub fn pagerank(
-        self,
-        alpha: f64, 
-        tol: f64,
-        max_iter: Option<usize>
-    ) -> (Col<f64>, f64) {
+    pub fn pagerank(self, alpha: f64, tol: f64, max_iter: Option<usize>) -> (Col<f64>, f64) {
         let mut a = self.inner;
 
         let n = a.nrows();
@@ -80,11 +76,10 @@ impl Matrix {
 
         let e: Col<f64> = Col::ones(n);
 
-        // 1. Compute Nj: number of outgoing edges per node
-        let mut nj = vec![0.0f64; n];
-        for (col, count) in nj.iter_mut().enumerate() {
-            *count = a.col_range(col).len() as f64;
-        }
+        // 1. Compute Nj: sum of outgoing edge weights
+        let nj: Vec<f64> = (0..n)
+            .map(|col| a.val_of_col(col).iter().sum::<f64>())
+            .collect();
 
         // 2. Compute Dj: Indicator of null Nj columns
         let dj = Col::from_fn(n, |i| if nj[i] == 0.0 { 1.0 } else { 0.0 });
@@ -95,12 +90,12 @@ impl Matrix {
                 let inv = 1.0 / count;
 
                 for val in a.val_of_col_mut(col) {
-                    *val = inv;
+                    *val *= inv;
                 }
             }
         }
 
-        // 4. Compute V 
+        // 4. Compute V
         let v = alpha * dj.transpose() + (1.0 - alpha) * e.transpose();
 
         // 5. Run the "Power Iteration" method
@@ -130,10 +125,10 @@ impl Matrix {
         r_next = alpha * &a * &r + (&e * vr) / nf;
 
         let tol = (r_next - &r).norm_l2();
-        
+
         (r, tol)
     }
-} 
+}
 
 impl Graph {
     pub fn conn_matrix(&self) -> Result<Matrix, CreationError> {
@@ -174,10 +169,6 @@ impl PagerankBuilder {
     }
 
     pub fn run(self) -> (Col<f64>, f64) {
-        self.mat.pagerank(
-            self.alpha,
-            self.tol,
-            self.max_iter
-        )
+        self.mat.pagerank(self.alpha, self.tol, self.max_iter)
     }
 }

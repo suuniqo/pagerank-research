@@ -4,8 +4,12 @@ pub mod graph;
 pub mod matrix;
 pub mod parser;
 
+use graph::{
+    Graph,
+    painter::Painter,
+    partition::{LouvainBuilder, PartitionSet},
+};
 use parser::GraphTSV;
-use graph::{Graph, painter::Painter, partition::{LouvainBuilder, PartitionSet}};
 
 use crate::matrix::{Matrix, PagerankBuilder};
 
@@ -36,7 +40,11 @@ fn _test_lvn_stanford() {
     let elapsed = start.elapsed();
     println!("louvain method: {} ms", elapsed.as_millis());
 
-    let mut communities: Vec<usize> = partition.communities().into_iter().map(|c| c.len()).collect();
+    let mut communities: Vec<usize> = partition
+        .communities()
+        .into_iter()
+        .map(|c| c.len())
+        .collect();
     communities.sort_by(|c1, c2| c2.cmp(c1));
 
     let n_comm = communities.len();
@@ -46,16 +54,21 @@ fn _test_lvn_stanford() {
     println!("- communities: \t{}", partition.len());
     println!("- modularity: \t{}", partition.modularity());
     println!("- tolerance: \t{:?}", &communities[..5.min(n_comm)]);
-    println!("- smallest: \t{:?}", &communities[n_comm.saturating_sub(5)..]);
+    println!(
+        "- smallest: \t{:?}",
+        &communities[n_comm.saturating_sub(5)..]
+    );
 
     Painter::draw_aggregate(&partition, "out/aggregate.dot");
 }
 
-
 fn _test_lvn_wikispeedia() {
-    fn community_frequencies(info: &GraphTSV, partitions: &PartitionSet) -> Vec<(HashMap<String, usize>, usize)> {
+    fn community_frequencies(
+        info: &GraphTSV,
+        partitions: &PartitionSet,
+    ) -> Vec<(HashMap<String, usize>, usize)> {
         let mut frequencies = vec![(HashMap::new(), 0); partitions.len()];
-        
+
         for node in 0..info.nodes.len() {
             let comm = partitions.community(node);
 
@@ -64,11 +77,12 @@ fn _test_lvn_wikispeedia() {
             for category in &info.categories[node] {
                 // for word in category {
                 if let Some(word) = category.first() {
-                    temp.entry(word.to_string()).and_modify(|x| {*x += 1}).or_insert(1);
+                    temp.entry(word.to_string())
+                        .and_modify(|x| *x += 1)
+                        .or_insert(1);
                     *count += 1;
                 }
             }
-
         }
 
         frequencies
@@ -79,7 +93,7 @@ fn _test_lvn_wikispeedia() {
     let (graph, tsv_info) = match Graph::from_tsv(
         "data/wikispeedia/articles.tsv",
         "data/wikispeedia/categories.tsv",
-        "data/wikispeedia/links.tsv"
+        "data/wikispeedia/links.tsv",
     ) {
         Ok(g) => g,
         Err(err) => {
@@ -104,38 +118,79 @@ fn _test_lvn_wikispeedia() {
     let elapsed = start.elapsed();
     println!("louvain method: {} ms", elapsed.as_millis());
 
-    let communities: Vec<usize> = partition.communities().into_iter().map(|c| c.len()).collect();
-    let mut community_size_ord = communities.clone();
+    let community_size: Vec<usize> = partition
+        .communities()
+        .into_iter()
+        .map(|c| c.len())
+        .collect();
+    let mut community_size_ord = community_size.clone();
     community_size_ord.sort_by(|c1, c2| c2.cmp(c1));
 
-    let n_comm = communities.len();
+    let n_comm = community_size.len();
 
     println!();
     println!("REPORT:");
     println!("- communities: \t{}", partition.len());
     println!("- modularity: \t{}", partition.modularity());
     println!("- largest: \t{:?}", &community_size_ord[..5.min(n_comm)]);
-    println!("- smallest: \t{:?}", &community_size_ord[n_comm.saturating_sub(5)..]);
+    println!(
+        "- smallest: \t{:?}",
+        &community_size_ord[n_comm.saturating_sub(5)..]
+    );
 
     println!("\nCOMMUNITIES:");
     let frequencies = community_frequencies(&tsv_info, &partition);
 
     for (comm, (comm_f, total)) in frequencies.into_iter().enumerate() {
-        let size = communities[comm];
+        let size = community_size[comm];
 
         let total = total as f64;
-        let mut sorted = comm_f.into_iter()
+        let mut sorted = comm_f
+            .into_iter()
             .map(|(word, count)| (word, (count as f64) / total))
             .collect::<Vec<_>>();
         sorted.sort_by(|(_, x), (_, y)| y.partial_cmp(x).unwrap());
 
-        
-        let formatted: Vec<String> = sorted.iter()
+        let formatted: Vec<String> = sorted
+            .iter()
             .map(|(name, x)| format!("({name}, {:.2})", x))
             .collect();
 
-        println!("size: {size} \ttags: {:?}", &formatted[..4.min(sorted.len())]);
+        println!(
+            "{comm}:\t size: {size} \ttags: {:?}",
+            &formatted[..3.min(sorted.len())]
+        );
     }
+
+    let mat = partition
+        .aggregate_graph()
+        .conn_matrix()
+        .expect("no memory");
+
+    let (rank, tol) = PagerankBuilder::new(mat)
+        .alpha(0.85)
+        .tolerance(0.0001)
+        .run();
+
+    let sum = rank.sum();
+
+    let mut rank = rank
+        .iter()
+        .enumerate()
+        .map(|(i, r)| (i, *r))
+        .collect::<Vec<(usize, f64)>>();
+
+    rank.sort_by(|(_, a), (_, b)| b.partial_cmp(a).unwrap());
+
+    println!();
+    println!("PAGERANK AGGREGATE:");
+    println!("- tolerance: \t{}", tol);
+    println!("- ranking sum: \t{}", sum);
+    println!("- ranking: \t{{");
+    for nr in rank.iter().take(10) {
+        println!("\t{:?}", nr);
+    }
+    println!("}}");
 
     Painter::draw_aggregate(&partition, "out/wikispeedia/aggregate.dot");
 }
@@ -171,8 +226,8 @@ fn _test_pgr_stanford() {
     rank.sort_by(|a, b| b.partial_cmp(a).unwrap());
 
     println!();
-    println!("REPORT:");
-    println!("- precision: \t{}", tol);
+    println!("PAGERANK:");
+    println!("- tolerance: \t{}", tol);
     println!("- ranking: \t{:?}", &rank[..10]);
 }
 
@@ -182,7 +237,7 @@ fn _test_pgr_wikispeedia() {
     let (mat, tsv_info) = match Matrix::from_tsv(
         "data/wikispeedia/articles.tsv",
         "data/wikispeedia/categories.tsv",
-        "data/wikispeedia/links.tsv"
+        "data/wikispeedia/links.tsv",
     ) {
         Ok(g) => g,
         Err(err) => {
@@ -220,7 +275,7 @@ fn _test_pgr_wikispeedia() {
         .collect();
 
     println!();
-    println!("REPORT:");
+    println!("PAGERANK:");
     println!("- tolerance: \t{}", tol);
     println!("- ranking sum: \t{}", sum);
     println!("- ranking: \t{{");
@@ -231,6 +286,6 @@ fn _test_pgr_wikispeedia() {
 }
 
 fn main() {
-    _test_lvn_stanford();
+    _test_lvn_wikispeedia();
     _test_pgr_wikispeedia();
 }

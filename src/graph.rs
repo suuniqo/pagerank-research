@@ -2,21 +2,18 @@ pub mod painter;
 pub mod partition;
 
 use crate::parser::error::ParseError;
-use crate::parser::{Parser, GraphMTX, GraphTSV};
+use crate::parser::{GraphMTX, GraphTSV, Parser};
 
 #[derive(Debug, Clone)]
 pub struct Graph {
     n_nodes: usize,
     n_edges: usize,
-    adj_list: Vec<Vec<(usize, usize)>>
+    adj_list: Vec<Vec<(usize, usize)>>,
 }
 
 impl Graph {
     pub fn new(adj_list: Vec<Vec<(usize, usize)>>) -> Self {
-        let n_edges = adj_list
-            .iter()
-            .map(|adj| adj.len())
-            .sum::<usize>();
+        let n_edges = adj_list.iter().map(|adj| adj.len()).sum::<usize>();
 
         let n_nodes = adj_list.len();
 
@@ -35,14 +32,21 @@ impl Graph {
             adj_list[src].push((dst, 1));
         }
 
-        Ok((Self {
-            n_nodes: graph.nrows,
-            n_edges: graph.nnz,
-            adj_list
-        }, graph))
+        Ok((
+            Self {
+                n_nodes: graph.nrows,
+                n_edges: graph.nnz,
+                adj_list,
+            },
+            graph,
+        ))
     }
 
-    pub fn from_tsv(path_articles: &str, path_categories: &str, path_links: &str) -> Result<(Self, GraphTSV), ParseError> {
+    pub fn from_tsv(
+        path_articles: &str,
+        path_categories: &str,
+        path_links: &str,
+    ) -> Result<(Self, GraphTSV), ParseError> {
         let graph = Parser::parse_tsv(path_articles, path_categories, path_links)?;
 
         let mut adj_list = vec![vec![]; graph.nodes.len()];
@@ -51,11 +55,14 @@ impl Graph {
             adj_list[src].push((dst, 1));
         }
 
-        Ok((Self {
-            n_nodes: graph.nodes.len(),
-            n_edges: graph.edges.len(),
-            adj_list
-        }, graph))
+        Ok((
+            Self {
+                n_nodes: graph.nodes.len(),
+                n_edges: graph.edges.len(),
+                adj_list,
+            },
+            graph,
+        ))
     }
 
     pub fn n_nodes(&self) -> usize {
@@ -103,12 +110,13 @@ impl Graph {
         Self {
             n_nodes: self.n_nodes,
             n_edges,
-            adj_list
+            adj_list,
         }
     }
 
     pub fn weights(&self) -> impl Iterator<Item = usize> {
-        self.adj_list.iter()
+        self.adj_list
+            .iter()
             .flat_map(|adjs| adjs.iter().map(|(_, w)| *w))
     }
 

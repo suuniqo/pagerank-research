@@ -60,10 +60,7 @@ impl Painter {
             .map(|c| c.len())
             .collect::<Vec<usize>>();
 
-        let max_size = *comm_sizes
-            .iter()
-            .max()
-            .unwrap_or(&1);
+        let max_size = *comm_sizes.iter().max().unwrap_or(&1);
 
         // -----------------------------
         // nodes
@@ -103,12 +100,7 @@ impl Painter {
 
                 let pen = 0.1 + 4.0 * (w as f32 / max_e);
 
-                writeln!(
-                    f,
-                    "  {} -- {} [penwidth={:.3}]",
-                    u, v, pen
-                )
-                .unwrap();
+                writeln!(f, "  {} -- {} [penwidth={:.3}]", u, v, pen).unwrap();
             }
         }
 
@@ -167,12 +159,7 @@ impl Painter {
 
                 let pen = 0.1 + 4.0 * (w as f32 / max_e);
 
-                writeln!(
-                    f,
-                    "  {} -- {} [penwidth={:.3}]",
-                    u, v, pen
-                )
-                .unwrap();
+                writeln!(f, "  {} -- {} [penwidth={:.3}]", u, v, pen).unwrap();
             }
         }
 

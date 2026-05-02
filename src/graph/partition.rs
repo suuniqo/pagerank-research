@@ -1,4 +1,8 @@
-use std::{collections::{HashMap, VecDeque}, vec, borrow::Cow};
+use std::{
+    borrow::Cow,
+    collections::{HashMap, VecDeque},
+    vec,
+};
 
 use rand::{rng, seq::SliceRandom};
 
@@ -7,7 +11,7 @@ use super::Graph;
 pub struct PartitionSet<'g> {
     graph: &'g Graph,
     n_partitions: usize,
-    community: Vec<usize>
+    community: Vec<usize>,
 }
 
 impl<'g> PartitionSet<'g> {
@@ -19,7 +23,7 @@ impl<'g> PartitionSet<'g> {
         Self {
             graph,
             n_partitions: 1,
-            community: vec![0; graph.n_nodes]
+            community: vec![0; graph.n_nodes],
         }
     }
 
@@ -28,7 +32,7 @@ impl<'g> PartitionSet<'g> {
         Self {
             graph,
             n_partitions: graph.n_nodes,
-            community: (0..graph.n_nodes).collect()
+            community: (0..graph.n_nodes).collect(),
         }
     }
 
@@ -38,12 +42,16 @@ impl<'g> PartitionSet<'g> {
         fast: bool,
         resolution: f64,
         gain_threshold: f64,
-        max_iter: Option<usize>
+        max_iter: Option<usize>,
     ) -> Self {
         let mut iter = 0;
         let mut curr = Self::singleton(graph);
 
-        let partition_move = if fast { Self::fast_louvain_moves } else { Self::louvain_moves };
+        let partition_move = if fast {
+            Self::fast_louvain_moves
+        } else {
+            Self::louvain_moves
+        };
 
         let m = graph.weights().sum::<usize>() as f64 / 2.0;
 
@@ -74,7 +82,7 @@ impl<'g> PartitionSet<'g> {
     //
     //     while max_iter.is_none_or(|max_iter| iter < max_iter)
     //         && let Some(next) = Self::fast_louvain_moves(&curr, resolution, m, gain_threshold)
-    //     { 
+    //     {
     //         curr = next;
     //
     //         // refine partition
@@ -158,7 +166,10 @@ impl<'g> PartitionSet<'g> {
             for &(v, weight) in adj {
                 let cv = self.community[v];
 
-                adj_list[cu].entry(cv).and_modify(|w| *w += weight).or_insert(weight);
+                adj_list[cu]
+                    .entry(cv)
+                    .and_modify(|w| *w += weight)
+                    .or_insert(weight);
             }
         }
 
@@ -170,7 +181,11 @@ impl<'g> PartitionSet<'g> {
         Cow::Owned(Graph::new(adj_list))
     }
 
-    fn neighbour_community_weights(graph: &Graph, u: usize, community: &[usize]) -> HashMap<usize, usize> {
+    fn neighbour_community_weights(
+        graph: &Graph,
+        u: usize,
+        community: &[usize],
+    ) -> HashMap<usize, usize> {
         let mut neig_comm_weights = HashMap::new();
         let neigs = &graph.adj_list[u];
 
@@ -202,7 +217,7 @@ impl<'g> PartitionSet<'g> {
                     final_tag.insert(prev_comm, new_comm);
 
                     new_comm
-                },
+                }
             };
 
             new_community[u] = new_comm;
@@ -224,7 +239,7 @@ impl<'g> PartitionSet<'g> {
         m: f64,
     ) -> (usize, f64) {
         let mut max_gain = 0.0;
-        let mut best_comm  = curr_comm;
+        let mut best_comm = curr_comm;
 
         // exclude u from the degree count
         strength_comm[curr_comm] -= curr_strength;
@@ -257,7 +272,12 @@ impl<'g> PartitionSet<'g> {
         (best_comm, max_gain)
     }
 
-    fn fast_louvain_moves(partition: &Self, resolution: f64, m: f64, gain_threshold: f64) -> Option<Self> {
+    fn fast_louvain_moves(
+        partition: &Self,
+        resolution: f64,
+        m: f64,
+        gain_threshold: f64,
+    ) -> Option<Self> {
         // Community partition
         let graph = partition.aggregate_graph();
         let mut community: Vec<usize> = (0..graph.n_nodes).collect();
@@ -286,7 +306,7 @@ impl<'g> PartitionSet<'g> {
                 curr_comm,
                 curr_strength,
                 resolution,
-                m
+                m,
             );
 
             if best_comm != curr_comm {
@@ -311,7 +331,12 @@ impl<'g> PartitionSet<'g> {
         Some(Self::compress_partition(partition, &community))
     }
 
-    fn louvain_moves(partition: &Self, resolution: f64, m: f64, gain_treshold: f64) -> Option<Self> {
+    fn louvain_moves(
+        partition: &Self,
+        resolution: f64,
+        m: f64,
+        gain_treshold: f64,
+    ) -> Option<Self> {
         // Community partition
         let graph = partition.aggregate_graph();
         let mut community: Vec<usize> = (0..graph.n_nodes).collect();
@@ -343,7 +368,7 @@ impl<'g> PartitionSet<'g> {
                     curr_comm,
                     curr_strength,
                     resolution,
-                    m
+                    m,
                 );
 
                 if best_comm != curr_comm {
