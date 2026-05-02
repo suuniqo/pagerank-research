@@ -109,8 +109,7 @@ impl Graph {
 
     pub fn weights(&self) -> impl Iterator<Item = usize> {
         self.adj_list.iter()
-            .map(|adjs| adjs.iter().map(|(_, w)| *w))
-            .flatten()
+            .flat_map(|adjs| adjs.iter().map(|(_, w)| *w))
     }
 
     pub fn weights_of(&self, v: usize) -> impl Iterator<Item = usize> {

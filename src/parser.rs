@@ -57,7 +57,7 @@ impl Parser {
 
             let nbytes = reader
                 .read_line(buf)
-                .map_err(|e| ParseError::Io(e))?;
+                .map_err(ParseError::Io)?;
 
             if nbytes == 0 {
                 return Err(ParseError::EmptyBody);
@@ -83,7 +83,7 @@ impl Parser {
         let mut nodes = Vec::new();
 
         let file_articles = File::open(path_articles)
-            .map_err(|e| ParseError::Io(e))?;
+            .map_err(ParseError::Io)?;
 
         let mut reader = BufReader::new(file_articles);
 
@@ -103,7 +103,7 @@ impl Parser {
 
             let nbytes = reader
                 .read_line(&mut buf)
-                .map_err(|e| ParseError::Io(e))?;
+                .map_err(ParseError::Io)?;
 
             if nbytes == 0 {
                 break;
@@ -114,7 +114,7 @@ impl Parser {
         let mut categories = vec![vec![]; nodes.len()];
 
         let file_categories = File::open(path_categories)
-            .map_err(|e| ParseError::Io(e))?;
+            .map_err(ParseError::Io)?;
 
         let mut reader = BufReader::new(file_categories);
 
@@ -150,7 +150,7 @@ impl Parser {
 
             let nbytes = reader
                 .read_line(&mut buf)
-                .map_err(|e| ParseError::Io(e))?;
+                .map_err(ParseError::Io)?;
 
             if nbytes == 0 {
                 break;
@@ -159,7 +159,7 @@ impl Parser {
 
         // parse edges
         let file_links = File::open(path_links)
-            .map_err(|e| ParseError::Io(e))?;
+            .map_err(ParseError::Io)?;
 
         let mut reader = BufReader::new(file_links);
 
@@ -198,7 +198,7 @@ impl Parser {
 
             let nbytes = reader
                 .read_line(&mut buf)
-                .map_err(|e| ParseError::Io(e))?;
+                .map_err(ParseError::Io)?;
 
             if nbytes == 0 {
                 break;
@@ -210,7 +210,7 @@ impl Parser {
 
     pub fn parse_mtx(path: &str) -> Result<GraphMTX, ParseError> {
         let file = File::open(path)
-            .map_err(|e| ParseError::Io(e))?;
+            .map_err(ParseError::Io)?;
 
         let mut reader = BufReader::new(file);
         let mut buf = String::new();
@@ -242,7 +242,7 @@ impl Parser {
             buf.clear();
 
             let nbytes = reader.read_line(&mut buf)
-                .map_err(|e| ParseError::Io(e))?;
+                .map_err(ParseError::Io)?;
 
             if nbytes == 0 {
                 return Err(ParseError::TooShort {

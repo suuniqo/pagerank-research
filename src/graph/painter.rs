@@ -7,7 +7,7 @@ pub struct Painter;
 
 impl Painter {
     fn hsv_hex(i: usize) -> String {
-        let h = (i as f32 * 0.61803398875) % 1.0;
+        let h = (i as f32 * 0.618034) % 1.0;
 
         let (r, g, b) = Self::hsv_to_rgb(h, 0.65, 0.95);
 
@@ -70,11 +70,9 @@ impl Painter {
         // -----------------------------
         let g = partition.aggregate_graph();
 
-        for i in 0..g.n_nodes {
-            let size = comm_sizes[i];
-
-            let width = 0.3 + 2.5 * (size as f64 / max_size as f64);
-            let label = format!("{}", size as usize);
+        for (i, size) in comm_sizes.iter().enumerate() {
+            let width = 0.3 + 2.5 * (*size as f64 / max_size as f64);
+            let label = format!("{}", size);
 
             let color = Self::hsv_hex(i);
 

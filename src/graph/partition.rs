@@ -58,8 +58,8 @@ impl<'g> PartitionSet<'g> {
         curr
     }
 
-    /// Creates a partition using the louvain method, which tries to
-    /// maximize modularity, while preserving community connectivity
+    // /// Creates a partition using the louvain method, which tries to
+    // /// maximize modularity, while preserving community connectivity
     // pub fn from_leiden(
     //     graph: &'g Graph,
     //     resolution: f64,
@@ -86,7 +86,7 @@ impl<'g> PartitionSet<'g> {
     //     curr
     // }
 
-
+    /// Returns the community `v` belongs to
     pub fn community(&self, v: usize) -> usize {
         self.community[v]
     }
@@ -132,6 +132,10 @@ impl<'g> PartitionSet<'g> {
 
     pub fn len(&self) -> usize {
         self.n_partitions
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.n_partitions == 0
     }
 
     pub fn graph(&self) -> &Graph {

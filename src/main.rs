@@ -168,7 +168,7 @@ fn _test_pgr_stanford() {
 
     let mut rank = rank.iter().map(|v| v / sum).collect::<Vec<f64>>();
 
-    rank.sort_by(|a, b| b.partial_cmp(&a).unwrap());
+    rank.sort_by(|a, b| b.partial_cmp(a).unwrap());
 
     println!();
     println!("REPORT:");
@@ -212,7 +212,7 @@ fn _test_pgr_wikispeedia() {
         .map(|(i, r)| (i, *r))
         .collect::<Vec<(usize, f64)>>();
 
-    rank.sort_by(|(_, a), (_, b)| b.partial_cmp(&a).unwrap());
+    rank.sort_by(|(_, a), (_, b)| b.partial_cmp(a).unwrap());
 
     let named_ranks: Vec<(String, f64)> = rank
         .iter()

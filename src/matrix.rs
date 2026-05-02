@@ -24,7 +24,7 @@ impl Matrix {
             graph.nrows,
             graph.ncols,
             &triplets,
-        ).map_err(|err| ParseError::MatrixError(err))?;
+        ).map_err(ParseError::MatrixError)?;
 
         Ok((Self::new(mat), graph))
     }
@@ -42,7 +42,7 @@ impl Matrix {
             graph.nodes.len(),
             graph.nodes.len(),
             &triplets,
-        ).map_err(|err| ParseError::MatrixError(err))?;
+        ).map_err(ParseError::MatrixError)?;
 
         Ok((Self::new(mat), graph))
     }
@@ -62,9 +62,8 @@ impl Matrix {
             &triplets
         );
 
-        mat.map(|mat| Matrix::new(mat))
+        mat.map(Matrix::new)
     }
-
 
     const PAGERANK_ALPHA: f64 = 0.85;
 
@@ -83,19 +82,18 @@ impl Matrix {
 
         // 1. Compute Nj: number of outgoing edges per node
         let mut nj = vec![0.0f64; n];
-        for col in 0..n {
-            nj[col] = a.col_range(col).len() as f64;
+        for (col, count) in nj.iter_mut().enumerate() {
+            *count = a.col_range(col).len() as f64;
         }
 
         // 2. Compute Dj: Indicator of null Nj columns
         let dj = Col::from_fn(n, |i| if nj[i] == 0.0 { 1.0 } else { 0.0 });
 
         // 3. Normalize A
-        for col in 0..n {
-            let nj_col = nj[col];
+        for (col, count) in nj.iter().enumerate() {
+            if *count != 0.0 {
+                let inv = 1.0 / count;
 
-            if nj_col != 0.0 {
-                let inv = 1.0 / nj_col;
                 for val in a.val_of_col_mut(col) {
                     *val = inv;
                 }
