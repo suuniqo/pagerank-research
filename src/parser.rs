@@ -51,6 +51,95 @@ impl GraphTSV {
     }
 }
 
+#[derive(Debug, Clone)]
+pub struct Neuron {
+    uid: usize,
+    cell_type: String,
+    classification: NeuronType,
+    region: CortexRegion
+}
+
+impl Neuron {
+    pub fn new(uid: usize, cell_type: String, classification: NeuronType, region: CortexRegion) -> Self {
+        Self {
+            uid,
+            cell_type,
+            classification,
+            region
+        }
+    }
+}
+
+impl std::hash::Hash for Neuron {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.uid.hash(state);
+    }
+}
+
+impl PartialEq for Neuron {
+    fn eq(&self, other: &Self) -> bool {
+        self.uid == other.uid
+    }
+}
+
+impl Eq for Neuron {}
+
+#[derive(Debug, Clone, Copy)]
+pub enum NeuronType {
+    Excitatory,
+    Inhibitory,
+}
+
+impl TryFrom<&str> for NeuronType {
+    type Error = ();
+
+    fn try_from(value: &str) -> Result<Self, ()> {
+        match value {
+            "excitatory_neuron" => Ok(Self::Excitatory),
+            "inhibitory_neuron" => Ok(Self::Inhibitory),
+            _ => Err(())
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum CortexRegion {
+    VISp,
+    VISrl,
+    VISlm,
+    VISal,
+}
+
+impl TryFrom<&str> for CortexRegion {
+    type Error = ();
+
+    fn try_from(value: &str) -> Result<Self, ()> {
+        match value {
+            "visp" => Ok(Self::VISp),
+            "visrl" => Ok(Self::VISrl),
+            "vislm" => Ok(Self::VISlm),
+            "visal" => Ok(Self::VISal),
+            _ => Err(())
+        }
+    }
+}
+
+pub struct GraphMICrONS {
+    edges: Vec<(usize, usize, usize)>,
+    neurons: Vec<Neuron>,
+    ids: HashMap<Neuron, usize>,
+}
+
+impl GraphMICrONS {
+    pub fn new(edges: Vec<(usize, usize, usize)>, neurons: Vec<Neuron>, ids: HashMap<Neuron, usize>) -> Self {
+        Self {
+            edges,
+            neurons,
+            ids
+        }
+    }
+}
+
 pub struct Parser;
 
 impl Parser {
@@ -257,5 +346,120 @@ impl Parser {
         }
 
         Ok(GraphMTX::new(edges, nrows, ncols, nnz))
+    }
+
+    pub fn parse_microns(path_links: &str, path_neurons: &str) -> Result<GraphMICrONS, ParseError> {
+        let mut buf = String::new();
+
+        // parse neurons
+        let mut ids = HashMap::new();
+        let mut neurons = Vec::new();
+
+        let file_articles = File::open(path_neurons).map_err(ParseError::Io)?;
+
+        let mut reader = BufReader::new(file_articles);
+
+        let _ = Parser::skip_header(&mut reader, &mut buf, '#')?;
+
+        loop {
+            let line = buf.trim();
+
+            if line.is_empty() {
+                return Err(ParseError::BadLine(buf));
+            }
+
+            let mut split = line.split('\t');
+
+            let index = split.next()
+                .ok_or(ParseError::BadLine(line.to_string()))?
+                .parse::<usize>()
+                .map_err(|_| ParseError::BadLine(line.to_string()))?;
+
+            let uid = split.next()
+                .ok_or(ParseError::BadLine(line.to_string()))?
+                .parse::<usize>()
+                .map_err(|_| ParseError::BadLine(line.to_string()))?;
+
+            let cell_type = split.next()
+                .ok_or(ParseError::BadLine(line.to_string()))?;
+
+            let classification = split.next()
+                .ok_or(ParseError::BadLine(line.to_string()))?
+                .try_into()
+                .map_err(|_| ParseError::BadLine(line.to_string()))?;
+            
+            let region = split.next()
+                .ok_or(ParseError::BadLine(line.to_string()))?
+                .try_into()
+                .map_err(|_| ParseError::BadLine(line.to_string()))?;      
+
+            let neuron = Neuron::new(uid, cell_type.to_owned(), classification, region);
+
+            if neurons.len() != index {
+                return Err(ParseError::Inconsistent { 
+                    reason: "Bad index".to_string(), 
+                    line: line.to_string() 
+                });
+            }
+
+            ids.insert(neuron.clone(), neurons.len());
+            neurons.push(neuron);
+
+            buf.clear();
+
+            let nbytes = reader.read_line(&mut buf).map_err(ParseError::Io)?;
+
+            if nbytes == 0 {
+                break;
+            }
+        }
+
+        // parse edges
+        let file_links = File::open(path_links).map_err(ParseError::Io)?;
+
+        let mut reader = BufReader::new(file_links);
+
+        let mut edges = Vec::new();
+
+        let _ = Parser::skip_header(&mut reader, &mut buf, '#')?;
+
+        loop {
+            let line = buf.trim();
+
+            if line.is_empty() {
+                return Err(ParseError::BadLine(buf));
+            }
+
+            let mut split = line.split('\t');
+
+            let src = split.next()
+                .ok_or(ParseError::BadLine(line.to_string()))?
+                .parse::<usize>()
+                .map_err(|_| ParseError::BadLine(line.to_string()))?;
+
+            
+            let dst = split.next()
+                .ok_or(ParseError::BadLine(line.to_string()))?
+                .parse::<usize>()
+                .map_err(|_| ParseError::BadLine(line.to_string()))?;
+
+
+            let weight = split.next()
+                .ok_or(ParseError::BadLine(line.to_string()))?
+                .parse::<usize>()
+                .map_err(|_| ParseError::BadLine(line.to_string()))?;
+
+            edges.push((src, dst, weight));
+
+            buf.clear();
+
+            let nbytes = reader.read_line(&mut buf).map_err(ParseError::Io)?;
+
+            if nbytes == 0 {
+                break;
+            }
+        }
+
+        Ok(GraphMICrONS::new(edges, neurons, ids))
     }
 }
