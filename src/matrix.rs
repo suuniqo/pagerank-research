@@ -68,7 +68,7 @@ impl Matrix {
 
     const PAGERANK_ALPHA: f64 = 0.85;
 
-    pub fn pagerank(self, alpha: f64, tol: f64, max_iter: Option<usize>) -> (Col<f64>, f64) {
+    pub fn pagerank(self, alpha: f64, tol: f64, max_iter: Option<usize>) -> (Col<f64>, f64, usize) {
         let mut a = self.inner;
 
         let n = a.nrows();
@@ -126,7 +126,35 @@ impl Matrix {
 
         let tol = (r_next - &r).norm_l2();
 
-        (r, tol)
+        (r, tol, iter)
+    }
+
+    pub fn ncols(&self) -> usize {
+        self.inner.ncols()
+    }
+
+    pub fn nrows(&self) -> usize {
+        self.inner.nrows()
+    }
+
+    pub fn zcols(&self) -> usize {
+        (0..self.ncols())
+            .map(|col| self.inner.val_of_col(col).iter().sum::<f64>())
+            .filter(|s| *s == 0.0)
+            .count()
+    }
+
+    pub fn zrows(&self) -> usize {
+        let mut row_count = vec![0.0; self.nrows()];
+
+        for triplet in self.inner.triplet_iter() {
+            row_count[triplet.row] += triplet.val;
+        }
+
+        row_count
+            .into_iter()
+            .filter(|s| *s == 0.0)
+            .count()
     }
 }
 
@@ -168,7 +196,7 @@ impl PagerankBuilder {
         self
     }
 
-    pub fn run(self) -> (Col<f64>, f64) {
+    pub fn run(self) -> (Col<f64>, f64, usize) {
         self.mat.pagerank(self.alpha, self.tol, self.max_iter)
     }
 }

@@ -1,4 +1,4 @@
-use std::{collections::HashMap, process};
+use std::{collections::HashMap, f64, process};
 
 pub mod graph;
 pub mod matrix;
@@ -33,7 +33,7 @@ fn _test_lvn_stanford() {
 
     let partition = LouvainBuilder::new(&undirected)
         .fast(true)
-        .resolution(1.0)
+        .resolution(2.5)
         .gain_threshold(0.0001)
         .run();
 
@@ -59,7 +59,7 @@ fn _test_lvn_stanford() {
         &communities[n_comm.saturating_sub(5)..]
     );
 
-    Painter::draw_aggregate(&partition, "out/aggregate.dot");
+    Painter::draw_aggregate(&partition, "out/web-stanford/aggregate.dot");
 }
 
 fn _test_lvn_wikispeedia() {
@@ -76,7 +76,7 @@ fn _test_lvn_wikispeedia() {
 
             for category in &info.categories[node] {
                 // for word in category {
-                if let Some(word) = category.first() {
+                if let Some(word) = category.last() {
                     temp.entry(word.to_string())
                         .and_modify(|x| *x += 1)
                         .or_insert(1);
@@ -111,7 +111,7 @@ fn _test_lvn_wikispeedia() {
 
     let partition = LouvainBuilder::new(&undirected)
         .fast(true)
-        .resolution(2.5)
+        .resolution(1.0)
         .gain_threshold(0.0001)
         .run();
 
@@ -167,7 +167,7 @@ fn _test_lvn_wikispeedia() {
         .conn_matrix()
         .expect("no memory");
 
-    let (rank, tol) = PagerankBuilder::new(mat)
+    let (rank, tol, iter) = PagerankBuilder::new(mat)
         .alpha(0.85)
         .tolerance(0.0001)
         .run();
@@ -184,7 +184,9 @@ fn _test_lvn_wikispeedia() {
 
     println!();
     println!("PAGERANK AGGREGATE:");
+    println!("- dimension: \t{}", rank.len());
     println!("- tolerance: \t{}", tol);
+    println!("- iterations: \t{}", iter);
     println!("- ranking sum: \t{}", sum);
     println!("- ranking: \t{{");
     for nr in rank.iter().take(10) {
@@ -193,6 +195,7 @@ fn _test_lvn_wikispeedia() {
     println!("}}");
 
     Painter::draw_aggregate(&partition, "out/wikispeedia/aggregate.dot");
+    Painter::draw_partition(&partition, "out/wikispeedia/partition.dot");
 }
 
 fn _test_pgr_stanford() {
@@ -211,9 +214,12 @@ fn _test_pgr_stanford() {
 
     let start = std::time::Instant::now();
 
-    let (rank, tol) = PagerankBuilder::new(mat)
+    let zcols = mat.zcols();
+    let zrows = mat.zrows();
+
+    let (rank, tol, iter) = PagerankBuilder::new(mat)
         .alpha(0.85)
-        .tolerance(0.0001)
+        .tolerance(1e-13)
         .run();
 
     let elapsed = start.elapsed();
@@ -227,7 +233,12 @@ fn _test_pgr_stanford() {
 
     println!();
     println!("PAGERANK:");
+    println!("- zrows: \t{}", zrows);
+    println!("- zcols: \t{}", zcols);
+    println!("- dimension: \t{}", rank.len());
+    println!("- minimum: \t{}", (1.0 - 0.85) / rank.len() as f64);
     println!("- tolerance: \t{}", tol);
+    println!("- iterations: \t{}", iter);
     println!("- ranking: \t{:?}", &rank[..10]);
 }
 
@@ -251,7 +262,10 @@ fn _test_pgr_wikispeedia() {
 
     let start = std::time::Instant::now();
 
-    let (rank, tol) = PagerankBuilder::new(mat)
+    let zcols = mat.zcols();
+    let zrows = mat.zrows();
+
+    let (rank, tol, iter) = PagerankBuilder::new(mat)
         .alpha(0.85)
         .tolerance(0.0001)
         .run();
@@ -276,16 +290,22 @@ fn _test_pgr_wikispeedia() {
 
     println!();
     println!("PAGERANK:");
+    println!("- zrows: \t{}", zrows);
+    println!("- zcols: \t{}", zcols);
+    println!("- dimension: \t{}", rank.len());
+    println!("- minimum: \t{}", (1.0 - 0.85) / rank.len() as f64);
     println!("- tolerance: \t{}", tol);
+    println!("- iterations: \t{}", iter);
     println!("- ranking sum: \t{}", sum);
     println!("- ranking: \t{{");
-    for nr in named_ranks.iter().take(10) {
+
+    for nr in &named_ranks[..10] {
         println!("\t{:?}", nr);
     }
+
     println!("}}");
 }
 
 fn main() {
     _test_lvn_wikispeedia();
-    _test_pgr_wikispeedia();
 }
