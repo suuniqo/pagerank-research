@@ -1,6 +1,6 @@
 use std::{
     borrow::Cow,
-    collections::{HashMap, VecDeque},
+    collections::{HashMap, HashSet, VecDeque},
     vec,
 };
 
@@ -99,7 +99,12 @@ impl<'g> PartitionSet<'g> {
         self.community[v]
     }
 
-    /// Partitions the vertices according to their tags
+    /// Returns a vector where the ith position stores the community the ith node belongs to.
+    pub fn community_arr(&self) -> &Vec<usize> {
+        &self.community
+    }
+
+    /// Returns a vector where the ith position stores the community the ith node belongs to.
     pub fn communities(&self) -> Vec<Vec<usize>> {
         let mut communities = vec![vec![]; self.n_partitions];
 
@@ -148,6 +153,36 @@ impl<'g> PartitionSet<'g> {
 
     pub fn graph(&self) -> &Graph {
         self.graph
+    }
+
+    pub fn collapse_smaller_than(&self, threshold: usize) -> Self {
+        let kept_communities: HashSet<usize> = self
+            .communities()
+            .into_iter()
+            .enumerate()
+            .map(|(i, c)| (i, c.len()))
+            .filter(|(_, size)| *size >= threshold)
+            .map(|(i, _)| i)
+            .collect();
+
+        let mapping: HashMap<usize, usize> = kept_communities
+            .iter()
+            .enumerate()
+            .map(|(i, c)| (*c, i))
+            .collect();
+
+        let n_partitions = kept_communities.len();
+
+        let collapsed = self.community
+            .iter()
+            .map(|c| if kept_communities.contains(c) { mapping[c] } else { n_partitions })
+            .collect();
+
+        Self {
+            graph: self.graph,
+            n_partitions: n_partitions + 1,
+            community: collapsed
+        }
     }
 
     pub fn aggregate_graph(&self) -> Cow<'g, Graph> {

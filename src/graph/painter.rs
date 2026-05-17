@@ -165,4 +165,15 @@ impl Painter {
 
         writeln!(f, "}}").unwrap();
     }
+
+    pub fn dump_communities(partition: &PartitionSet, path: &str) {
+        let file = File::create(path).unwrap();
+        let mut writer = BufWriter::new(file);
+
+        for (i, c) in partition.community_arr().iter().enumerate() {
+            writeln!(writer, "{i},{c}").unwrap();
+        }
+
+        writer.flush().unwrap();
+    }
 }

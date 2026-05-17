@@ -480,6 +480,9 @@ fn _test_lvn_microns() {
 
     Painter::draw_aggregate(&partition, "out/microns/aggregate.dot");
     Painter::draw_partition(&partition, "out/microns/partition.dot");
+
+    let partition = partition.collapse_smaller_than(100);
+    Painter::dump_communities(&partition, "out/microns/communities.csv");
 }
 
 fn main() {
