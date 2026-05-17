@@ -1,4 +1,4 @@
-use std::{collections::HashMap, f64, process};
+use std::{collections::HashMap, f64, fs::File, io::{Write, BufWriter}, process};
 
 pub mod graph;
 pub mod matrix;
@@ -485,6 +485,186 @@ fn _test_lvn_microns() {
     Painter::dump_communities(&partition, "out/microns/communities.csv");
 }
 
+fn _test_rsl_microns() {
+    fn community_frequencies_region(
+        info: &GraphMICrONS,
+        partitions: &PartitionSet,
+    ) -> Vec<(HashMap<CortexRegion, usize>, usize)> {
+        let mut frequencies = vec![(HashMap::new(), 0); partitions.len()];
+
+        for (i, neuron) in info.neurons.iter().enumerate() {
+            let comm = partitions.community(i);
+
+            let (temp, count) = &mut frequencies[comm];
+
+            temp.entry(neuron.region)
+                .and_modify(|x| *x += 1)
+                .or_insert(1);
+
+            *count += 1;
+        }
+
+        frequencies
+    }
+    fn community_frequencies_type(
+        info: &GraphMICrONS,
+        partitions: &PartitionSet,
+    ) -> Vec<(HashMap<String, usize>, usize)> {
+        let mut frequencies = vec![(HashMap::new(), 0); partitions.len()];
+
+        for (i, neuron) in info.neurons.iter().enumerate() {
+            let comm = partitions.community(i);
+
+            let (temp, count) = &mut frequencies[comm];
+
+            temp.entry(neuron.cell_type[..neuron.cell_type.len() - 1].to_string())
+                .and_modify(|x| *x += 1)
+                .or_insert(1);
+
+            *count += 1;
+        }
+
+        frequencies
+    }
+
+    let start = std::time::Instant::now();
+
+    let (graph, info) = match Graph::from_microns("data/microns/neurons.tsv", "data/microns/links.tsv") {
+        Ok(g) => g,
+        Err(err) => {
+            eprintln!("error: {err}");
+            process::exit(1);
+        }
+    };
+
+    let elapsed = start.elapsed();
+    println!("process matrix: {} ms", elapsed.as_millis());
+
+    let undirected = graph.make_undirected();
+
+    for res in (10..=50).step_by(5).map(|x| x as f64 / 10.0) {
+        let start = std::time::Instant::now();
+        let partition = LouvainBuilder::new(&undirected)
+            .fast(true)
+            .resolution(res)
+            .gain_threshold(f64::EPSILON)
+            .run();
+
+        let elapsed = start.elapsed();
+        println!("louvain method: {} ms", elapsed.as_millis());
+
+        let community_size: Vec<usize> = partition
+            .communities()
+            .into_iter()
+            .map(|c| c.len())
+            .collect();
+        let mut community_size_ord = community_size.clone();
+        community_size_ord.sort_by(|c1, c2| c2.cmp(c1));
+
+        let n_comm = community_size.len();
+
+        let report_file = File::create(format!("out/microns/res/dump-{res}.txt"))
+            .expect("Create report file");
+        let mut rw = BufWriter::new(report_file);
+
+        writeln!(rw, "REPORT:").unwrap();
+        writeln!(rw, "- communities: \t{}", partition.len()).unwrap();
+        writeln!(rw, "- modularity: \t{}", partition.modularity()).unwrap();
+        writeln!(rw, "- largest: \t{:?}", &community_size_ord[..5.min(n_comm)]).unwrap();
+        writeln!(rw, "- smallest: \t{:?}", &community_size_ord[n_comm.saturating_sub(5)..]).unwrap();
+
+        writeln!(rw, "\nFREQUENCY REGION:").unwrap();
+        let frequencies = community_frequencies_region(&info, &partition);
+
+        for (comm, (comm_f, total)) in frequencies.into_iter().enumerate() {
+            let size = community_size[comm];
+
+            if size < 10 {
+                continue;
+            }
+            let total = total as f64;
+
+            let mut sorted = comm_f
+                .into_iter()
+                .map(|(word, count)| (word, (count as f64) / total))
+                .collect::<Vec<_>>();
+
+            sorted.sort_by(|(_, x), (_, y)| y.partial_cmp(x).unwrap());
+
+            let formatted: Vec<String> = sorted
+                .iter()
+                .map(|(name, x)| format!("({name:?}, {:.2})", x))
+                .collect();
+
+            writeln!(rw, "{comm}:\t size: {size} \ttags: {:?}", &formatted).unwrap();
+        }
+
+        writeln!(rw, "\nFREQUENCY CELL TYPE:").unwrap();
+        let frequencies = community_frequencies_type(&info, &partition);
+
+        for (comm, (comm_f, total)) in frequencies.into_iter().enumerate() {
+            let size = community_size[comm];
+
+            if size < 10 {
+                continue;
+            }
+            let total = total as f64;
+
+            let mut sorted = comm_f
+                .into_iter()
+                .map(|(word, count)| (word, (count as f64) / total))
+                .collect::<Vec<_>>();
+
+            sorted.sort_by(|(_, x), (_, y)| y.partial_cmp(x).unwrap());
+
+            let formatted: Vec<String> = sorted
+                .iter()
+                .map(|(name, x)| format!("({name}, {:.2})", x))
+                .collect();
+
+            writeln!(rw, "{comm}:\t size: {size} \ttags: {:?}", &formatted).unwrap();
+        }
+
+        let mat = partition
+            .aggregate_graph()
+            .conn_matrix()
+            .expect("no memory");
+
+        let (rank, tol, iter) = PagerankBuilder::new(mat)
+            .alpha(0.85)
+            .tolerance(0.0001)
+            .run();
+
+        let sum = rank.sum();
+
+        let mut rank = rank
+            .iter()
+            .enumerate()
+            .map(|(i, r)| (i, *r))
+            .collect::<Vec<(usize, f64)>>();
+
+        rank.sort_by(|(_, a), (_, b)| b.partial_cmp(a).unwrap());
+
+        writeln!(rw, ).unwrap();
+        writeln!(rw, "PAGERANK AGGREGATE:").unwrap();
+        writeln!(rw, "- dimension: \t{}", rank.len()).unwrap();
+        writeln!(rw, "- tolerance: \t{}", tol).unwrap();
+        writeln!(rw, "- iterations: \t{}", iter).unwrap();
+        writeln!(rw, "- ranking sum: \t{}", sum).unwrap();
+        writeln!(rw, "- ranking: \t{{").unwrap();
+        for nr in rank.iter().take(10) {
+            writeln!(rw, "\t{:?}", nr).unwrap();
+        }
+        writeln!(rw, "}}").unwrap();
+
+        Painter::draw_aggregate(&partition, &format!("out/microns/res/aggregate-{res}.dot"));
+        Painter::draw_partition(&partition, &format!("out/microns/res/partition-{res}.dot"));
+
+        let partition = partition.collapse_smaller_than(100);
+        Painter::dump_communities(&partition, &format!("out/microns/res/communities-{res}.csv"));
+    }
+}
+
 fn main() {
-    _test_lvn_microns();
+    _test_rsl_microns();
 }
