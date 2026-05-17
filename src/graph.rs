@@ -2,7 +2,7 @@ pub mod painter;
 pub mod partition;
 
 use crate::parser::error::ParseError;
-use crate::parser::{Parser, GraphMTX, GraphTSV};
+use crate::parser::{GraphMICrONS, GraphMTX, GraphTSV, Parser};
 
 #[derive(Debug, Clone)]
 pub struct Graph {
@@ -55,6 +55,26 @@ impl Graph {
             n_nodes: graph.nodes.len(),
             n_edges: graph.edges.len(),
             adj_list
+        }, graph))
+    }
+
+
+    pub fn from_microns(
+        path_neurons: &str,
+        path_links: &str,
+    ) -> Result<(Self, GraphMICrONS), ParseError> {
+        let graph = Parser::parse_microns(path_links, path_neurons)?;
+
+        let mut adj_list = vec![vec![]; graph.neurons.len()];
+
+        for &(src, dst, weight) in &graph.edges {
+            adj_list[src].push((dst, weight));
+        }
+
+        Ok((Self {
+            n_nodes: graph.neurons.len(),
+            n_edges: graph.edges.len(),
+            adj_list,
         }, graph))
     }
 

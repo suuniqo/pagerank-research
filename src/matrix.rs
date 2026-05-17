@@ -5,7 +5,7 @@ use faer::{
 
 use crate::{
     graph::Graph,
-    parser::{GraphMTX, GraphTSV, ParseError, Parser},
+    parser::{GraphMICrONS, GraphMTX, GraphTSV, ParseError, Parser},
 };
 
 pub struct Matrix {
@@ -45,9 +45,26 @@ impl Matrix {
             .map(|&(src, dst)| Triplet::new(dst, src, 1.0))
             .collect();
 
-        let mat =
-            SparseColMat::try_new_from_triplets(graph.nodes.len(), graph.nodes.len(), &triplets)
-                .map_err(ParseError::MatrixError)?;
+        let mat = SparseColMat::try_new_from_triplets(graph.nodes.len(), graph.nodes.len(), &triplets)
+            .map_err(ParseError::MatrixError)?;
+
+        Ok((Self::new(mat), graph))
+    }
+
+    pub fn from_microns(
+        path_neurons: &str,
+        path_links: &str,
+    ) -> Result<(Self, GraphMICrONS), ParseError> {
+        let graph = Parser::parse_microns(path_links, path_neurons)?;
+
+        let triplets: Vec<Triplet<usize, usize, f64>> = graph
+            .edges
+            .iter()
+            .map(|&(src, dst, weight)| Triplet::new(dst, src, weight as f64))
+            .collect();
+
+        let mat = SparseColMat::try_new_from_triplets(graph.neurons.len(), graph.neurons.len(), &triplets)
+            .map_err(ParseError::MatrixError)?;
 
         Ok((Self::new(mat), graph))
     }

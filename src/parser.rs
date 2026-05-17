@@ -53,10 +53,10 @@ impl GraphTSV {
 
 #[derive(Debug, Clone)]
 pub struct Neuron {
-    uid: usize,
-    cell_type: String,
-    classification: NeuronType,
-    region: CortexRegion
+    pub uid: usize,
+    pub cell_type: String,
+    pub classification: NeuronType,
+    pub region: CortexRegion
 }
 
 impl Neuron {
@@ -84,7 +84,7 @@ impl PartialEq for Neuron {
 
 impl Eq for Neuron {}
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum NeuronType {
     Excitatory,
     Inhibitory,
@@ -102,7 +102,7 @@ impl TryFrom<&str> for NeuronType {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
 pub enum CortexRegion {
     VISp,
     VISrl,
@@ -125,9 +125,9 @@ impl TryFrom<&str> for CortexRegion {
 }
 
 pub struct GraphMICrONS {
-    edges: Vec<(usize, usize, usize)>,
-    neurons: Vec<Neuron>,
-    ids: HashMap<Neuron, usize>,
+    pub edges: Vec<(usize, usize, usize)>,
+    pub neurons: Vec<Neuron>,
+    pub ids: HashMap<Neuron, usize>,
 }
 
 impl GraphMICrONS {
