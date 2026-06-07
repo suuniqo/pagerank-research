@@ -3,6 +3,10 @@ import numpy
 import conntility
 from matplotlib import pyplot as plt
 
+from sys import argv
+
+use_legend = not ("--no-legend" in argv)
+
 fn_mat = "../../data/microns/microns_mm3_connectome_v1181.h5"
 name_dset_f = "full"
 name_dset_c = "condensed"
@@ -36,7 +40,8 @@ for res in numpy.arange(1.0, 5.5, 0.5):
         handles.append(line)
 
     ax.axis("equal")
-    ax.legend(handles=handles, title="Community", bbox_to_anchor=(1.05, 1), loc="upper left", borderaxespad=0)
+    if use_legend:
+        ax.legend(handles=handles, title="Community", bbox_to_anchor=(1.05, 1), loc="upper left", borderaxespad=0)
     plt.tight_layout()
     plt.title(f"Surface. Resolution = {res}")
     plt.show()
@@ -55,7 +60,8 @@ for res in numpy.arange(1.0, 5.5, 0.5):
         handles.append(line)
 
     ax.axis("equal")
-    ax.legend(handles=handles, title="Community", bbox_to_anchor=(1.05, 1), loc="upper left", borderaxespad=0)
+    if use_legend:
+        ax.legend(handles=handles, title="Community", bbox_to_anchor=(1.05, 1), loc="upper left", borderaxespad=0)
     plt.tight_layout()
     plt.title(f"Depth. Resolution = {res}")
     plt.show()
