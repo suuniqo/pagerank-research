@@ -1,7 +1,5 @@
 use std::{
-    collections::HashMap,
-    fs::File,
-    io::{BufRead, BufReader},
+    collections::HashMap, fs::File, io::{BufRead, BufReader}
 };
 
 pub mod error;
@@ -54,17 +52,15 @@ impl GraphTSV {
 #[derive(Debug, Clone)]
 pub struct Neuron {
     pub uid: usize,
-    pub cell_type: String,
-    pub classification: NeuronType,
-    pub region: CortexRegion
+    pub class: NeuronClass,
+    pub region: NeuronRegion
 }
 
 impl Neuron {
-    pub fn new(uid: usize, cell_type: String, classification: NeuronType, region: CortexRegion) -> Self {
+    pub fn new(uid: usize, class: NeuronClass, region: NeuronRegion) -> Self {
         Self {
             uid,
-            cell_type,
-            classification,
+            class,
             region
         }
     }
@@ -84,33 +80,213 @@ impl PartialEq for Neuron {
 
 impl Eq for Neuron {}
 
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum NeuronType {
-    Excitatory,
-    Inhibitory,
+pub enum NeuronClass {
+    Excitatory(ExcitatoryType),
+    Inhibitory(InhibitoryType),
 }
 
-impl TryFrom<&str> for NeuronType {
-    type Error = ();
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum ExcitatoryType {
+    L2(NeuronCluster),
+    L3(NeuronCluster),
+    L4(NeuronCluster),
+    L5(NeuronCluster),
+    L6(NeuronSpan, NeuronCluster),
+}
 
-    fn try_from(value: &str) -> Result<Self, ()> {
-        match value {
-            "excitatory_neuron" => Ok(Self::Excitatory),
-            "inhibitory_neuron" => Ok(Self::Inhibitory),
-            _ => Err(())
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum NeuronCluster {
+    A,
+    B,
+    C,
+    ET,
+    NP,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum NeuronSpan {
+    Short,
+    Tall,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum InhibitoryType {
+    DTC,
+    ITC,
+    PTC,
+    STC,
+}
+
+impl NeuronClass {
+    fn build(classification: &str, subtype: &str) -> Option<NeuronClass> {
+        Some(match classification {
+            "excitatory_neuron" => {
+                let subtype = ExcitatoryType::from(subtype)?;
+                Self::Excitatory(subtype)
+            },
+            "inhibitory_neuron" => {
+                let subtype = InhibitoryType::from(subtype)?;
+                Self::Inhibitory(subtype)
+            },
+            _ => return None,
+        })
+    }
+
+    pub fn classification(&self) -> String {
+        match self {
+            NeuronClass::Excitatory(_) => "excitatory_neuron",
+            NeuronClass::Inhibitory(_) => "inhibitory_neuron",
+        }.to_string()
+    }
+
+    pub fn layer(&self) -> String {
+        match self {
+            NeuronClass::Excitatory(subtype) => subtype.partial_id(),
+            NeuronClass::Inhibitory(subtype) => subtype.id(),
+        }
+    }
+
+    pub fn subtype(&self) -> String {
+        match self {
+            NeuronClass::Excitatory(subtype) => subtype.id(),
+            NeuronClass::Inhibitory(subtype) => subtype.id(),
         }
     }
 }
 
+impl InhibitoryType {
+    fn from(subtype: &str) -> Option<InhibitoryType> {
+        Some(match subtype {
+            "DTC" => Self::DTC,
+            "ITC" => Self::ITC,
+            "PTC" => Self::PTC,
+            "STC" => Self::STC,
+            _     => return None,
+        })
+    }
+
+    fn id(&self) -> String {
+        match self {
+            InhibitoryType::DTC => "DTC",
+            InhibitoryType::ITC => "ITC",
+            InhibitoryType::PTC => "PTC",
+            InhibitoryType::STC => "STC",
+        }.to_string()
+    }
+}
+
+impl ExcitatoryType {
+    fn from(subtype: &str) -> Option<ExcitatoryType> {
+        if subtype.len() <= 2 {
+            return None;
+        }
+
+        let layer = &subtype[..2];
+        let cluster = &subtype[2..];
+
+        Some(match layer {
+            "L2" => {
+                let cluster = NeuronCluster::from(cluster)?;
+                Self::L2(cluster)
+            },
+            "L3" => {
+                let cluster = NeuronCluster::from(cluster)?;
+                Self::L3(cluster)
+
+            },
+            "L4" => {
+                let cluster = NeuronCluster::from(cluster)?;
+                Self::L4(cluster)
+
+            },
+            "L5" => {
+                let cluster = NeuronCluster::from(cluster)?;
+                Self::L5(cluster)
+            },
+            "L6" => {
+                let (span, cluster) = cluster.split_once("-")?;
+
+                let span = NeuronSpan::from(span)?;
+                let cluster = NeuronCluster::from(cluster)?;
+
+                Self::L6(span, cluster)
+            },
+            _ => return None,
+        })
+    }
+
+    fn partial_id(&self) -> String {
+        match self {
+            Self::L2(_)  => "L2",
+            Self::L3(_)  => "L3",
+            Self::L4(_)  => "L4",
+            Self::L5(_)  => "L5",
+            Self::L6(..) => "L6",
+        }.to_string()
+    }
+
+    fn id(&self) -> String {
+        match self {
+            Self::L2(cluster) => format!("{}{}", self.partial_id(), cluster.id()),
+            Self::L3(cluster) => format!("{}{}", self.partial_id(), cluster.id()),
+            Self::L4(cluster) => format!("{}{}", self.partial_id(), cluster.id()),
+            Self::L5(cluster) => format!("{}{}", self.partial_id(), cluster.id()),
+            Self::L6(span, cluster) => format!("{}{}-{}", self.partial_id(), span.id(), cluster.id()),
+        }
+    }
+}
+
+impl NeuronCluster {
+    fn from(cluster: &str) -> Option<Self> {
+        Some(match cluster {
+            "a"  => Self::A,
+            "b"  => Self::B,
+            "c"  => Self::C,
+            "ET" => Self::ET,
+            "NP" => Self::NP,
+            _    => return None,
+        })
+    }
+
+    fn id(&self) -> String {
+        match self {
+            Self::A  => "a",
+            Self::B  => "b",
+            Self::C  => "c",
+            Self::ET => "ET",
+            Self::NP => "NP",
+        }.to_string()
+    }
+}
+
+impl NeuronSpan {
+    fn from(cluster: &str) -> Option<Self> {
+        Some(match cluster {
+            "short" => Self::Short,
+            "tall"  => Self::Tall,
+            _       => return None,
+        })
+    }
+
+    fn id(&self) -> String {
+        match self {
+            NeuronSpan::Short => "short",
+            NeuronSpan::Tall  => "tall",
+        }.to_string()
+    }
+}
+
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
-pub enum CortexRegion {
+pub enum NeuronRegion {
     VISp,
     VISrl,
     VISlm,
     VISal,
 }
 
-impl TryFrom<&str> for CortexRegion {
+impl TryFrom<&str> for NeuronRegion {
     type Error = ();
 
     fn try_from(value: &str) -> Result<Self, ()> {
@@ -380,20 +556,21 @@ impl Parser {
                 .parse::<usize>()
                 .map_err(|_| ParseError::BadLine(line.to_string()))?;
 
-            let cell_type = split.next()
+            let cell_subtype = split.next()
                 .ok_or(ParseError::BadLine(line.to_string()))?;
 
             let classification = split.next()
-                .ok_or(ParseError::BadLine(line.to_string()))?
-                .try_into()
-                .map_err(|_| ParseError::BadLine(line.to_string()))?;
-            
+                .ok_or(ParseError::BadLine(line.to_string()))?;
+
             let region = split.next()
                 .ok_or(ParseError::BadLine(line.to_string()))?
                 .try_into()
                 .map_err(|_| ParseError::BadLine(line.to_string()))?;      
 
-            let neuron = Neuron::new(uid, cell_type.to_owned(), classification, region);
+            let cell_type = NeuronClass::build(classification, cell_subtype)
+                .ok_or(ParseError::BadLine(line.to_string()))?;
+            
+            let neuron = Neuron::new(uid, cell_type, region);
 
             if neurons.len() != index {
                 return Err(ParseError::Inconsistent { 

@@ -11,7 +11,7 @@ use graph::{
 };
 use parser::GraphTSV;
 
-use crate::{matrix::{Matrix, PagerankBuilder}, parser::{CortexRegion, GraphMICrONS}};
+use crate::{matrix::{Matrix, PagerankBuilder}, parser::{NeuronRegion, GraphMICrONS}};
 
 fn _test_lvn_stanford() {
     let start = std::time::Instant::now();
@@ -32,10 +32,11 @@ fn _test_lvn_stanford() {
     let start = std::time::Instant::now();
 
     let partition = LouvainBuilder::new(&undirected)
-        .fast(false)
+        .fast(true)
         .resolution(1.0)
         .gain_threshold(0.0001)
         .run();
+    let partition = partition.collapse_smaller_than(100);
 
     let elapsed = start.elapsed();
     println!("louvain method: {} ms", elapsed.as_millis());
@@ -56,7 +57,7 @@ fn _test_lvn_stanford() {
     println!("- tolerance: \t{:?}", &communities[..5.min(n_comm)]);
     println!("- smallest: \t{:?}", &communities[n_comm.saturating_sub(5)..]);
 
-    Painter::draw_aggregate(&partition, "out/web-stanford/aggregate.dot");
+    Painter::draw_aggregate(&partition, None, "out/web-stanford/aggregate.dot");
 }
 
 fn _test_lvn_wikispeedia() {
@@ -108,7 +109,7 @@ fn _test_lvn_wikispeedia() {
 
     let partition = LouvainBuilder::new(&undirected)
         .fast(true)
-        .resolution(1.0)
+        .resolution(2.5)
         .gain_threshold(0.0001)
         .run();
 
@@ -138,6 +139,8 @@ fn _test_lvn_wikispeedia() {
     println!("\nCOMMUNITIES:");
     let frequencies = community_frequencies(&tsv_info, &partition);
 
+    let mut labels = Vec::new();
+
     for (comm, (comm_f, total)) in frequencies.into_iter().enumerate() {
         let size = community_size[comm];
 
@@ -153,10 +156,13 @@ fn _test_lvn_wikispeedia() {
             .map(|(name, x)| format!("({name}, {:.2})", x))
             .collect();
 
+
         println!(
             "{comm}:\t size: {size} \ttags: {:?}",
             &formatted[..3.min(sorted.len())]
         );
+
+        labels.push(format!("{comm}:{}", formatted[..3.min(sorted.len())].join(" ")));
     }
 
     let mat = partition
@@ -191,7 +197,7 @@ fn _test_lvn_wikispeedia() {
     }
     println!("}}");
 
-    Painter::draw_aggregate(&partition, "out/wikispeedia/aggregate.dot");
+    Painter::draw_aggregate(&partition, Some(labels), "out/wikispeedia/aggregate.dot");
     Painter::draw_partition(&partition, "out/wikispeedia/partition.dot");
 }
 
@@ -313,7 +319,7 @@ fn _test_lvn_microns() {
     fn community_frequencies_region(
         info: &GraphMICrONS,
         partitions: &PartitionSet,
-    ) -> Vec<(HashMap<CortexRegion, usize>, usize)> {
+    ) -> Vec<(HashMap<NeuronRegion, usize>, usize)> {
         let mut frequencies = vec![(HashMap::new(), 0); partitions.len()];
 
         for (i, neuron) in info.neurons.iter().enumerate() {
@@ -341,7 +347,7 @@ fn _test_lvn_microns() {
 
             let (temp, count) = &mut frequencies[comm];
 
-            temp.entry(neuron.cell_type[..neuron.cell_type.len() - 1].to_string())
+            temp.entry(neuron.class.layer())
                 .and_modify(|x| *x += 1)
                 .or_insert(1);
 
@@ -373,6 +379,7 @@ fn _test_lvn_microns() {
         .resolution(1.0)
         .gain_threshold(f64::EPSILON)
         .run();
+    let partition = partition.collapse_smaller_than(100);
 
     let elapsed = start.elapsed();
     println!("louvain method: {} ms", elapsed.as_millis());
@@ -478,10 +485,9 @@ fn _test_lvn_microns() {
     }
     println!("}}");
 
-    Painter::draw_aggregate(&partition, "out/microns/aggregate.dot");
+    Painter::draw_aggregate(&partition, None, "out/microns/aggregate.dot");
     Painter::draw_partition(&partition, "out/microns/partition.dot");
 
-    let partition = partition.collapse_smaller_than(100);
     Painter::dump_communities(&partition, "out/microns/communities.csv");
 }
 
@@ -489,7 +495,7 @@ fn _test_rsl_microns() {
     fn community_frequencies_region(
         info: &GraphMICrONS,
         partitions: &PartitionSet,
-    ) -> Vec<(HashMap<CortexRegion, usize>, usize)> {
+    ) -> Vec<(HashMap<NeuronRegion, usize>, usize)> {
         let mut frequencies = vec![(HashMap::new(), 0); partitions.len()];
 
         for (i, neuron) in info.neurons.iter().enumerate() {
@@ -517,7 +523,7 @@ fn _test_rsl_microns() {
 
             let (temp, count) = &mut frequencies[comm];
 
-            temp.entry(neuron.cell_type[..neuron.cell_type.len() - 1].to_string())
+            temp.entry(neuron.class.layer())
                 .and_modify(|x| *x += 1)
                 .or_insert(1);
 
@@ -657,7 +663,7 @@ fn _test_rsl_microns() {
         }
         writeln!(rw, "}}").unwrap();
 
-        Painter::draw_aggregate(&partition, &format!("out/microns/res/aggregate-{res}.dot"));
+        Painter::draw_aggregate(&partition, None, &format!("out/microns/res/aggregate-{res}.dot"));
         Painter::draw_partition(&partition, &format!("out/microns/res/partition-{res}.dot"));
 
         let partition = partition.collapse_smaller_than(100);
@@ -666,5 +672,5 @@ fn _test_rsl_microns() {
 }
 
 fn main() {
-    _test_rsl_microns();
+    _test_lvn_microns();
 }

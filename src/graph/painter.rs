@@ -34,7 +34,7 @@ impl Painter {
         ((r * 255.0) as u8, (g * 255.0) as u8, (b * 255.0) as u8)
     }
 
-    pub fn draw_aggregate(partition: &PartitionSet, output: &str) {
+    pub fn draw_aggregate(partition: &PartitionSet, labels: Option<Vec<String>>, output: &str) {
         let mut f = BufWriter::new(File::create(output).unwrap());
 
         writeln!(f, "graph G {{").unwrap();
@@ -69,16 +69,14 @@ impl Painter {
 
         for (i, size) in comm_sizes.iter().enumerate() {
             let width = 0.3 + 2.5 * (*size as f64 / max_size as f64);
-            let label = format!("{}", size);
 
             let color = Self::hsv_hex(i);
 
             writeln!(
                 f,
-                "  {} [label=\"{}\", width={:.3}, fillcolor=\"{}\"]",
-                i, label, width, color
-            )
-            .unwrap();
+                "  {} [label=\"{}\", width={:.3}, fillcolor=\"{}\", fontsize=18]",
+                i, labels.clone().map(|l| l[i].clone()).unwrap_or(i.to_string()), width, color
+            ).unwrap();
         }
 
         // -----------------------------
@@ -100,7 +98,11 @@ impl Painter {
 
                 let pen = 0.1 + 4.0 * (w as f32 / max_e);
 
-                writeln!(f, "  {} -- {} [penwidth={:.3}]", u, v, pen).unwrap();
+                writeln!(
+                    f,
+                    "  {} -- {} [penwidth={:.3}, label=\"{:.3}\", fontsize=10]",
+                    u, v, pen, w
+                ).unwrap();
             }
         }
 
