@@ -230,9 +230,11 @@ fn _test_pgr_stanford() {
 
     let sum = rank.sum();
 
-    let mut rank = rank.iter().map(|v| v / sum).collect::<Vec<f64>>();
+    let mut rank = rank.iter().enumerate()
+        .map(|(i, v)| (i + 1, v / sum))
+        .collect::<Vec<(usize, f64)>>();
 
-    rank.sort_by(|a, b| b.partial_cmp(a).unwrap());
+    rank.sort_by(|(_, a), (_, b)| b.partial_cmp(a).unwrap());
 
     println!();
     println!("PAGERANK:");

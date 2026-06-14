@@ -123,18 +123,17 @@ impl Matrix {
         let mut iter = 0;
 
         while max_iter.is_none_or(|max_iter| iter < max_iter) {
-            r = &r / r.norm_l2();
-
             let vr = &v * &r;
             r_next = alpha * &a * &r + (&e * vr) / nf;
-
-            if (&r_next - &r).norm_l2() <= tol {
-                break;
-            }
+            r_next = &r_next / r_next.norm_l2();
 
             std::mem::swap(&mut r, &mut r_next);
 
             iter += 1;
+
+            if (&r_next - &r).norm_l2() <= tol {
+                break;
+            }
         }
 
         // 6. Compute tolerance
