@@ -36,6 +36,18 @@ impl<'g> PartitionSet<'g> {
         }
     }
 
+    pub fn change_graph<'h>(&self, new_graph: &'h Graph) -> Option<PartitionSet<'h>> {
+        if self.graph.n_nodes() != new_graph.n_nodes() {
+            return None;
+        }
+
+        Some(PartitionSet {
+            graph: new_graph,
+            n_partitions: self.n_partitions,
+            community: self.community.clone(),
+        })
+    }
+
     /// Creates a partition using the louvain method, which tries to maximize modularity
     pub fn from_louvain(
         graph: &'g Graph,
@@ -66,7 +78,7 @@ impl<'g> PartitionSet<'g> {
         curr
     }
 
-    // /// Creates a partition using the louvain method, which tries to
+    // /// Creates a partition using the leiden algorithm, which tries to
     // /// maximize modularity, while preserving community connectivity
     // pub fn from_leiden(
     //     graph: &'g Graph,

@@ -68,22 +68,22 @@ for res in numpy.arange(1.0, 5.5, 0.5):
 
     # 3d graph
 
-    # sel = numpy.random.choice(len(C.vertices), 10000, replace=False)
+    sel = numpy.random.choice(len(C.vertices), 20000, replace=False)
 
-    # df = C.vertices.iloc[sel]
+    df = C.vertices.iloc[sel]
 
-    # fig = plt.figure(figsize=(14, 9))
-    # ax = fig.add_subplot(111, projection='3d')
+    fig = plt.figure(figsize=(14, 9))
+    ax = fig.add_subplot(111, projection='3d')
 
-    # handles = []
-    # for name, group in df.groupby("community"):
-    #     sc = ax.scatter(group["x_nm"], group["y_nm"], group["z_nm"],
-    #                     s=1, label=f"Community {name}")
-    #     handles.append(sc)
+    handles = []
+    for name, group in df.groupby("community"):
+        sc = ax.scatter(group["x_nm"], group["y_nm"], group["z_nm"],
+                        s=10, label=f"Community {name}")
+        handles.append(sc)
 
-    # ax.set_xlabel("X")
-    # ax.set_ylabel("Y")
-    # ax.set_zlabel("Z")
-    # ax.legend(handles=handles, title="Community", bbox_to_anchor=(1.05, 1), loc="upper left", borderaxespad=0)
-    # plt.tight_layout()
-    # plt.show()
+    ax.set_xlabel("X")
+    ax.set_ylabel("Y")
+    ax.set_zlabel("Z")
+    ax.legend(handles=handles, title="Community", bbox_to_anchor=(1.05, 1), loc="upper left", borderaxespad=0)
+    plt.tight_layout()
+    plt.show()

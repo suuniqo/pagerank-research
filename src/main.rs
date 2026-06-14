@@ -357,6 +357,20 @@ fn _test_lvn_microns() {
         frequencies
     }
 
+    fn total_layer_count(
+        graph: &GraphMICrONS,
+    ) -> HashMap<String, usize> {
+        let mut freq = HashMap::new();
+
+        for neuron in &graph.neurons {
+            freq.entry(neuron.class.layer())
+                .and_modify(|x| *x += 1)
+                .or_insert(1);
+        }
+
+        freq
+    }
+
     let start = std::time::Instant::now();
 
     let (graph, info) = match Graph::from_microns("data/microns/neurons.tsv", "data/microns/links.tsv") {
@@ -369,14 +383,16 @@ fn _test_lvn_microns() {
 
     let elapsed = start.elapsed();
     println!("process matrix: {} ms", elapsed.as_millis());
+    dbg!(total_layer_count(&info));
 
     let undirected = graph.make_undirected();
 
     let start = std::time::Instant::now();
 
+    // best: 1.3
     let partition = LouvainBuilder::new(&undirected)
         .fast(true)
-        .resolution(1.0)
+        .resolution(1.3)
         .gain_threshold(f64::EPSILON)
         .run();
     let partition = partition.collapse_smaller_than(100);
@@ -450,8 +466,12 @@ fn _test_lvn_microns() {
             .map(|(name, x)| format!("({name}, {:.2})", x))
             .collect();
 
-        println!("{comm}:\t size: {size} \ttags: {:?}", &formatted[..4]);
+        println!("{comm}:\t size: {size} \ttags: {:?}", &formatted);
     }
+
+    let partition = partition
+        .change_graph(&graph)
+        .unwrap();
 
     let mat = partition
         .aggregate_graph()
@@ -480,7 +500,7 @@ fn _test_lvn_microns() {
     println!("- iterations: \t{}", iter);
     println!("- ranking sum: \t{}", sum);
     println!("- ranking: \t{{");
-    for nr in rank.iter().take(10) {
+    for nr in rank.iter().take(10).map(|(i, r)| (i, r / sum)) {
         println!("\t{:?}", nr);
     }
     println!("}}");
@@ -512,6 +532,7 @@ fn _test_rsl_microns() {
 
         frequencies
     }
+
     fn community_frequencies_type(
         info: &GraphMICrONS,
         partitions: &PartitionSet,
